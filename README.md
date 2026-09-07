@@ -60,6 +60,11 @@ Write `@$sha # v1`. Never write `@v1`.
 | `dash-exclude-defaults` | `true` | Set `false` to gate the held-out paths like everything else. |
 | `dash-force-zero` | `false` | Assert the tree carries no dash instead of ratcheting. |
 | `actionlint-extra-labels` | `""` | Runner labels this repo uses beyond the fleet set, one per line. |
+| `actionlint-config-extra` | `""` | Raw actionlint config YAML merged over the fleet config and the caller's own file. |
+
+A caller's own `.github/actionlint.yaml` is merged in automatically, so migrating does not
+drop its suppressions. Label lists union; the caller's file wins on conflicts, and
+`actionlint-config-extra` wins over both.
 
 ## What the workflow owns
 
@@ -72,7 +77,8 @@ These stopped being prose each repo restates:
 - `ubuntu-slim` everywhere except where the tool forbids it. betterleaks needs `envsubst` for
   cosign; `kjanat/actionlint` is a Docker action and needs a daemon.
 - `setup-uv` with a blank `cache-dependency-glob` and a weekly `cache-suffix` rotation.
-- One concurrency group per calling repo and ref, cancelling only on pull requests.
+- One concurrency group per calling repo, calling workflow, and ref, cancelling only on
+  pull requests.
 
 ## Status
 

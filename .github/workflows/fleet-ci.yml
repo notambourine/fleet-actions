@@ -60,13 +60,19 @@ on:
         description: Newline-separated runner labels this repo uses beyond the fleet set.
         type: string
         default: ""
+      actionlint-config-extra:
+        description: Raw actionlint config YAML merged over the fleet config and the caller's own file.
+        type: string
+        default: ""
 
 permissions:
   contents: read
 
 concurrency:
-  # github.repository is the CALLER here, so one group per calling repo and ref.
-  group: fleet-ci-${{ github.repository }}-${{ github.ref }}
+  # github.repository and github.workflow are the CALLER's here, so one group per
+  # calling repo, calling workflow, and ref. Without github.workflow, two caller
+  # workflows that both call fleet-ci share a group and cancel each other.
+  group: fleet-ci-${{ github.repository }}-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -116,6 +122,7 @@ jobs:
       - name: fleet actionlint config
         env:
           EXTRA_LABELS: ${{ inputs.actionlint-extra-labels }}
+          CONFIG_EXTRA: ${{ inputs.actionlint-config-extra }}
         run: |
           # actionlint rejects runner labels it does not know, and the fleet's cheap
           # tier is newer than its built-in list.
@@ -128,10 +135,30 @@ jobs:
             printf '%s\n' "$EXTRA_LABELS" | while IFS= read -r label; do
               if [ -n "$label" ]; then echo "    - $label"; fi
             done
+          } > "${RUNNER_TEMP}/fleet.yml"
+
+          # config-file OVERRIDES the default path, so a caller with an existing
+          # .github/actionlint.yaml would silently lose it and see its suppressed
+          # findings return as failures. Merge it instead of replacing it.
+          SOURCES=("${RUNNER_TEMP}/fleet.yml")
+          for candidate in .github/actionlint.yaml .github/actionlint.yml; do
+            if [ -f "$candidate" ]; then SOURCES+=("$candidate"); break; fi
+          done
+          if [ -n "$CONFIG_EXTRA" ]; then
+            printf '%s\n' "$CONFIG_EXTRA" > "${RUNNER_TEMP}/extra.yml"
+            SOURCES+=("${RUNNER_TEMP}/extra.yml")
+          fi
+
+          # `*+` deep-merges and APPENDS arrays, so label lists union rather than the
+          # last document winning. Later documents win on scalars, so the caller's
+          # file and then the input override the fleet defaults.
           # The workspace, not RUNNER_TEMP: the Docker action joins config-file onto
           # /github/workspace, so an absolute host path resolves under the mount and
           # is never found.
-          } > "${GITHUB_WORKSPACE}/.actionlint-fleet.yml"
+          # shellcheck disable=SC2016 # the yq expression is not shell interpolation
+          yq eval-all '. as $doc ireduce ({}; . *+ $doc)' "${SOURCES[@]}" \
+            > "${GITHUB_WORKSPACE}/.actionlint-fleet.yml"
+          cat "${GITHUB_WORKSPACE}/.actionlint-fleet.yml"
       # Resolved from the floating v1.15 tag, whose action.yml pins the image BY DIGEST.
       # A `# v1.15.1` label would mean the sha came from the release tag, which leaves
       # the image on a mutable GHCR tag.
