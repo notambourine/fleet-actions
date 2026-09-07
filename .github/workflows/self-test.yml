@@ -40,10 +40,15 @@ jobs:
           if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
             CHANGED=$(git ls-files)
           else
-            CHANGED=$(git diff --name-only "$BASE" HEAD)
+            CHANGED=$(git diff --no-renames --name-only "$BASE" HEAD)
           fi
           TOOLS=$(printf '%s\n' "$CHANGED" |
             sed -n 's|^tools/\([^/]*\)/.*|\1|p' | sort -u |
+            while IFS= read -r tool; do
+              if [ -d "tools/$tool" ]; then
+                printf '%s\n' "$tool"
+              fi
+            done |
             jq -R . | jq -sc .)
           echo "tools=$TOOLS" >> "$GITHUB_OUTPUT"
           echo "changed tool suites: $TOOLS"
