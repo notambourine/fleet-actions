@@ -21,5 +21,9 @@ their next pin bump, so treat every change here as a change to every repo.
   floating label fails every consumer the moment `v1` moves past them.
 - Keep `refs/tags/v1` exempt from tag immutability. The floating tag is promoted by
   `PATCH .../git/refs/tags/v1`, which an immutable-tags ruleset breaks permanently.
+- Land every change through a squash PR. `main` takes no direct push and the rulesets
+  carry no bypass actors, so a commit written straight to `main` is rejected, not merged.
+- Require only checks that report on every PR. `tools (<name>)` is path filtered and
+  absent from most runs; requiring it leaves merges pending with nothing to clear them.
 - Pin `wormhook: false` in wormhook's own CI. wormhook calls `fleet-ci.yml`, which calls
   wormhook, so a wormhook regression would otherwise leave no green path to fix it.
