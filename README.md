@@ -46,6 +46,7 @@ Use `@$sha # $tag`. Do not use `@v1` or label a commit pin `# v1`.
 | `wormhook` | `true` | Scan for npm supply-chain malware. |
 | `pnpm-pin` | `true` | Require `package.json#packageManager`. |
 | `scan-mode` | `git` | Set the betterleaks subcommand to `git` or `dir`. |
+| `wormhook-mode` | `deep` | Set the wormhook scan depth to `fast` or `deep`. |
 | `fetch-depth` | `0` | Set checkout depth. `scan-mode: git` requires `0`. |
 | `betterleaks-version` | `latest` | Select `latest` or an exact betterleaks release. |
 | `betterleaks-path` | `""` | Set the scan path. Empty uses the workspace root. |
@@ -61,6 +62,26 @@ Use `@$sha # $tag`. Do not use `@v1` or label a commit pin `# v1`.
 
 The workflow merges a caller's `.github/actionlint.yaml` or
 `.github/actionlint.yml`. The extra config input takes precedence.
+
+## Scanning installed dependencies
+
+`fleet-ci` never installs, so its wormhook step sees source only. `deep` forces the
+Tier-2 `node_modules` content walk and skips silently when the directory is absent,
+which makes it free here and a real gate on a repo that commits the tree.
+
+Reaching installed dependencies takes a second call in the build workflow, in the same
+job as the install:
+
+```yaml
+- run: npm ci
+- uses: notambourine/wormhook@<sha> # v0.31.1
+  with:
+    mode: deep
+```
+
+A repo that does this may pass `wormhook: false` to `fleet-ci` and rely on the
+post-install scan alone. Keep the default `true` if the install runs behind a path
+filter or in a job that can be skipped, since the fleet scan is what still reports.
 
 ## Local actions
 
