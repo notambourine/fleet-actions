@@ -58,8 +58,6 @@ outputs:
 runs:
   using: composite
   steps:
-    # Pinned while betterleaks itself is not: cosign is a build tool, and a frozen
-    # scanner ruleset is exactly what "latest" exists to avoid.
     - if: inputs.install-cosign == 'true'
       uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
 
@@ -94,16 +92,13 @@ runs:
         esac
         slug="${os}_${arch}"
 
-        # Unpack outside the workspace: a compressed Go binary is exactly the entropy
-        # a secret scanner flags.
+        # Keep the archive outside the scanned workspace.
         dir="${RUNNER_TEMP}/betterleaks-${tag}-${slug}"
         mkdir -p "$dir"
         cd "$dir"
         gh release download "$tag" -R "$repo" --clobber \
           -p "betterleaks_*_${slug}.tar.gz" -p checksums.txt -p checksums.txt.sigstore.json
 
-        # Never pipe cosign: a pipe would let a verify failure reach the scan step on
-        # an unverified binary if pipefail is ever lost.
         cosign verify-blob --bundle checksums.txt.sigstore.json \
           --certificate-oidc-issuer https://token.actions.githubusercontent.com \
           --certificate-identity "https://github.com/${repo}/.github/workflows/release.yml@refs/tags/${tag}" \
@@ -159,8 +154,7 @@ runs:
           log_opts=""
         fi
 
-        # --redact keeps a finding out of a public log; validation stays off so no
-        # candidate secret is sent to a vendor API.
+        # Do not send candidate secrets to vendor validation APIs.
         args=("$BL_SCAN" "$target" --no-banner "--redact=$BL_REDACT" --confidence "$BL_CONFIDENCE")
         if [ -n "$log_opts" ]; then
           args+=("--log-opts=$log_opts")
