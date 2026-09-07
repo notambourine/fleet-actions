@@ -139,14 +139,17 @@ jobs:
             printf '%s\n' "$EXTRA_LABELS" | while IFS= read -r label; do
               if [ -n "$label" ]; then echo "    - $label"; fi
             done
-          } > "${RUNNER_TEMP}/actionlint.yml"
+          # The workspace, not RUNNER_TEMP: the Docker action joins config-file onto
+          # /github/workspace, so an absolute host path resolves under the mount and
+          # is never found.
+          } > "${GITHUB_WORKSPACE}/.actionlint-fleet.yml"
       # Resolved from the floating v1.15 tag, whose action.yml pins the image BY DIGEST.
       # A `# v1.15.1` label would mean the sha came from the release tag, which leaves
       # the image on a mutable GHCR tag.
       - uses: kjanat/actionlint@e7434e3127c1c4645bad1d6476f48d4b52a29c29 # v1.15
         with:
           format: github
-          config-file: ${{ runner.temp }}/actionlint.yml
+          config-file: .actionlint-fleet.yml
 
   dashes:
     if: inputs.dashes
