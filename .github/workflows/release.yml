@@ -11,18 +11,26 @@ permissions:
   actions: read
   contents: write
 
+concurrency:
+  group: release-v1
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: ubuntu-slim
     timeout-minutes: 5
     steps:
-      - name: move v1 and publish
+      - name: validate, publish, and promote v1
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
           SHA: ${{ github.sha }}
         run: |
+          if [[ ! "$TAG" =~ ^v1\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::Expected a stable v1.N tag, got $TAG"; exit 1
+          fi
           TAG_SHA=$(gh api "repos/$REPO/commits/$TAG" --jq .sha)
           if [ "$TAG_SHA" != "$SHA" ]; then
             echo "::error::$TAG no longer points to $SHA"; exit 1
@@ -38,8 +46,29 @@ jobs:
             echo "::error::$SHA needs a successful self-test push run on main before release"; exit 1
           fi
 
-          # PATCH fails when v1 does not exist yet, so fall back to creating it.
-          gh api -X PATCH "repos/$REPO/git/refs/tags/v1" -f sha="$SHA" -F force=true ||
+          RELEASES=$(gh api --paginate "repos/$REPO/releases" | jq -s 'add')
+          LATEST=$(jq -r --arg tag "$TAG" '
+            [$tag, (.[] | select(.draft == false and .prerelease == false) |
+              .tag_name | select(test("^v1\\.(0|[1-9][0-9]*)$")))] |
+            max_by(ltrimstr("v1.") | tonumber)' <<<"$RELEASES")
+          if [ "$LATEST" != "$TAG" ]; then
+            echo "Skipping $TAG: $LATEST is already published"; exit 0
+          fi
+
+          RELEASE=$(jq --arg tag "$TAG" '.[] | select(.tag_name == $tag)' <<<"$RELEASES")
+          if [ -n "$RELEASE" ]; then
+            if ! jq -e '.draft == false and .prerelease == false' <<<"$RELEASE" >/dev/null; then
+              echo "::error::$TAG exists as a draft or prerelease"; exit 1
+            fi
+          else
+            gh release create "$TAG" --repo "$REPO" --verify-tag --generate-notes --title "$TAG"
+          fi
+
+          REF_EXISTS=$(gh api "repos/$REPO/git/matching-refs/tags/v1" \
+            --jq 'any(.[]; .ref == "refs/tags/v1")')
+          if [ "$REF_EXISTS" = true ]; then
+            gh api -X PATCH "repos/$REPO/git/refs/tags/v1" -f sha="$SHA" -F force=false
+          else
             gh api -X POST "repos/$REPO/git/refs" -f ref=refs/tags/v1 -f sha="$SHA"
-          gh release create "$TAG" --repo "$REPO" --generate-notes --title "$TAG"
+          fi
           echo "v1 -> $SHA ($TAG)"
