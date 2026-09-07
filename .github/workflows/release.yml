@@ -8,6 +8,7 @@ on:
     tags: ["v1.*"]
 
 permissions:
+  actions: read
   contents: write
 
 jobs:
@@ -22,6 +23,21 @@ jobs:
           TAG: ${{ github.ref_name }}
           SHA: ${{ github.sha }}
         run: |
+          TAG_SHA=$(gh api "repos/$REPO/commits/$TAG" --jq .sha)
+          if [ "$TAG_SHA" != "$SHA" ]; then
+            echo "::error::$TAG no longer points to $SHA"; exit 1
+          fi
+          STATUS=$(gh api "repos/$REPO/compare/$SHA...main" --jq .status)
+          if [ "$STATUS" != ahead ] && [ "$STATUS" != identical ]; then
+            echo "::error::$SHA is not on main"; exit 1
+          fi
+          PASSED=$(gh api --method GET "repos/$REPO/actions/workflows/self-test.yml/runs" \
+            -f head_sha="$SHA" -f branch=main -f event=push -f per_page=1 \
+            --jq '.workflow_runs[0] | .status == "completed" and .conclusion == "success"')
+          if [ "$PASSED" != true ]; then
+            echo "::error::$SHA needs a successful self-test push run on main before release"; exit 1
+          fi
+
           # PATCH fails when v1 does not exist yet, so fall back to creating it.
           gh api -X PATCH "repos/$REPO/git/refs/tags/v1" -f sha="$SHA" -F force=true ||
             gh api -X POST "repos/$REPO/git/refs" -f ref=refs/tags/v1 -f sha="$SHA"
