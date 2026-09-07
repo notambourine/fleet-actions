@@ -1,8 +1,10 @@
 name: release
 
-# Cutting a release is `git tag v1.N && git push origin v1.N`. This moves the floating
-# v1 that consumers resolve their pin from. The v1.* pattern never matches v1 itself,
-# so moving it cannot retrigger this workflow.
+# Cutting a release is `git tag v1.N.P && git push origin v1.N.P`. The version is named
+# by hand because only a human knows whether a change is a patch or a config-API bump.
+# This also force-moves the floating v1. Consumers pin a SHA labelled with the immutable
+# tag and let Dependabot bump it; resolving `@v1` directly is unsupported and will break.
+# The v1.* pattern never matches v1 itself, so moving it cannot retrigger this workflow.
 on:
   push:
     tags: ["v1.*"]
@@ -28,8 +30,8 @@ jobs:
           TAG: ${{ github.ref_name }}
           SHA: ${{ github.sha }}
         run: |
-          if [[ ! "$TAG" =~ ^v1\.(0|[1-9][0-9]*)$ ]]; then
-            echo "::error::Expected a stable v1.N tag, got $TAG"; exit 1
+          if [[ ! "$TAG" =~ ^v1\.(0|[1-9][0-9]*)(\.(0|[1-9][0-9]*))?$ ]]; then
+            echo "::error::Expected a stable v1.N or v1.N.P tag, got $TAG"; exit 1
           fi
           TAG_SHA=$(gh api "repos/$REPO/commits/$TAG" --jq .sha)
           if [ "$TAG_SHA" != "$SHA" ]; then
@@ -47,10 +49,10 @@ jobs:
           fi
 
           RELEASES=$(gh api --paginate "repos/$REPO/releases" | jq -s 'add')
-          LATEST=$(jq -r --arg tag "$TAG" '
-            [$tag, (.[] | select(.draft == false and .prerelease == false) |
-              .tag_name | select(test("^v1\\.(0|[1-9][0-9]*)$")))] |
-            max_by(ltrimstr("v1.") | tonumber)' <<<"$RELEASES")
+          PUBLISHED=$(jq -r '.[] | select(.draft == false and .prerelease == false) |
+            .tag_name | select(test("^v1\\.(0|[1-9][0-9]*)(\\.(0|[1-9][0-9]*))?$"))' <<<"$RELEASES")
+          # sort -V, not a numeric jq max: v1.1 and v1.0.1 do not compare as numbers.
+          LATEST=$(printf '%s\n%s\n' "$TAG" "$PUBLISHED" | grep . | sort -V | tail -1)
           if [ "$LATEST" != "$TAG" ]; then
             echo "Skipping $TAG: $LATEST is already published"; exit 0
           fi
@@ -67,7 +69,9 @@ jobs:
           REF_EXISTS=$(gh api "repos/$REPO/git/matching-refs/tags/v1" \
             --jq 'any(.[]; .ref == "refs/tags/v1")')
           if [ "$REF_EXISTS" = true ]; then
-            gh api -X PATCH "repos/$REPO/git/refs/tags/v1" -f sha="$SHA" -F force=false
+            # force=true so a v1 left somewhere wrong is fixed by cutting the next tag,
+            # not by hand surgery on a ref the tag guard otherwise protects.
+            gh api -X PATCH "repos/$REPO/git/refs/tags/v1" -f sha="$SHA" -F force=true
           else
             gh api -X POST "repos/$REPO/git/refs" -f ref=refs/tags/v1 -f sha="$SHA"
           fi

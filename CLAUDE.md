@@ -16,9 +16,13 @@ their next pin bump, so treat every change here as a change to every repo.
   way `tools/tripwire` does, in split literals the tripwire scanner cannot match.
 - Keep one directory per tool: `tools/<name>/{action.yml, scripts/, test/run.sh}`.
   `self-test.yml` discovers `tools/<name>/test/run.sh`; absorbing a tool edits no workflow.
-- Label every consumer pin with the immutable `v1.N` tag, never `# v1`. zizmor's
-  `ref-version-mismatch` resolves the comment and compares it to the pinned commit, so a
-  floating label fails every consumer the moment `v1` moves past them.
+- Label every consumer pin with the immutable `v1.N` or `v1.N.P` tag, never `# v1`.
+  zizmor's `ref-version-mismatch` resolves the comment and compares it to the pinned
+  commit, so a floating label fails every consumer the moment `v1` moves past them.
+- Name the release version by hand: `v1.N.P` for a patch or a dependency bump, `v1.N` for
+  a change to the inputs consumers pass. No workflow can tell those apart, so nothing
+  auto-increments. Consumers pin SHAs and take Dependabot's bump PR; `@v1` floats and is
+  unsupported, so a consumer that resolves it accepts the breakage.
 - Keep `refs/tags/v1` exempt from tag immutability. The floating tag is promoted by
   `PATCH .../git/refs/tags/v1`, which an immutable-tags ruleset breaks permanently.
 - Land every change through a squash PR. `main` takes no direct push and the rulesets
