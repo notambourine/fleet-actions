@@ -36,6 +36,13 @@ on:
         description: betterleaks subcommand, git or dir. git fingerprints commits.
         type: string
         default: git
+      wormhook-mode:
+        description: >-
+          wormhook scan depth, fast or deep. deep forces the Tier-2 node_modules content walk;
+          it no-ops when the directory is absent, so it only costs a repo that commits the tree.
+          fleet-ci never installs, so a repo wanting real Tier-2 runs wormhook again after npm ci.
+        type: string
+        default: deep
       fetch-depth:
         description: Checkout depth. betterleaks git needs the full history.
         type: number
@@ -191,7 +198,7 @@ jobs:
         if: ${{ inputs.wormhook && !cancelled() }}
         uses: notambourine/wormhook@1270e6a1e7dc2fad0a0abe738a1c56c6e6496cff # v0.31.1
         with:
-          mode: fast
+          mode: ${{ inputs.wormhook-mode }}
 
       - name: pnpm-pin
         if: ${{ inputs.pnpm-pin && !cancelled() }}
