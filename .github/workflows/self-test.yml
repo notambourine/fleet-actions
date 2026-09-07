@@ -1,14 +1,10 @@
 name: self-test
 
-# fleet-ci gates its own repo, and each absorbed tool runs its own suite only when
-# its directory changed.
 on:
   pull_request:
   push:
     branches: [main]
   schedule:
-    # Path filtering means a tool's suite may never run again after the commit that
-    # absorbed it, which makes runner image drift and bash/perl/git upgrades invisible.
     - cron: "23 11 * * 1,4"
 
 permissions:
@@ -18,13 +14,8 @@ jobs:
   fleet-ci:
     uses: ./.github/workflows/fleet-ci.yml
     with:
-      # Dogfood the dash gate at its strictest setting. Nothing else proves the
-      # built-in hold-out list is a convenience rather than a blind spot.
       dash-exclude-defaults: false
 
-  # betterleaks cannot be a tools/<name>/test/run.sh. Both cases below assert
-  # behavior that only exists through `uses:`, and pinned-version asserts a step
-  # OUTPUT. The discovered-script slot cannot express either.
   betterleaks-self-scan:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -35,8 +26,6 @@ jobs:
           persist-credentials: false
       - uses: ./tools/betterleaks
 
-  # Proves the explicit-version path verifies and runs the same way, which is the
-  # escape hatch a consumer reaches for when an upstream rule turns the fleet red.
   betterleaks-pinned-version:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -56,7 +45,6 @@ jobs:
           [ "$RESOLVED" = v1.8.0 ] || { echo "::error::ran $RESOLVED, expected v1.8.0"; exit 1; }
 
   betterleaks-shellcheck:
-    # yq and shellcheck are preinstalled here; ubuntu-slim would need apt for both.
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -65,14 +53,10 @@ jobs:
           persist-credentials: false
       - name: ShellCheck the composite steps
         run: |
-          # The action's whole product is embedded bash; extract each run: block so a
-          # broken edit fails here instead of in a consumer's CI.
           n=$(yq '[.runs.steps[] | select(has("run"))] | length' tools/betterleaks/action.yml)
           for i in $(seq 0 $((n - 1))); do
             {
               echo '#!/usr/bin/env bash'
-              # The runner exports GITHUB_*/RUNNER_*/BL_* into the step, so SC2154 is
-              # noise here and every other check stays on.
               echo '# shellcheck disable=SC2154'
               yq "[.runs.steps[] | select(has(\"run\"))][$i].run" tools/betterleaks/action.yml
             } > "${RUNNER_TEMP}/step-$i.sh"
@@ -89,9 +73,6 @@ jobs:
           persist-credentials: false
       - name: kjanat/actionlint pin resolves to a digest-pinned image
         run: |
-          # dependabot.yml ignores this action, which also suppresses its security
-          # advisories. The trade is only sound while the pinned commit keeps the
-          # Docker image on a digest. Assert that instead of trusting the comment.
           PIN=$(grep -oE 'kjanat/actionlint@[0-9a-f]{40}' .github/workflows/fleet-ci.yml |
             head -1 | cut -d@ -f2)
           if [ -z "$PIN" ]; then
@@ -121,11 +102,8 @@ jobs:
           persist-credentials: false
       - id: detect
         env:
-          # Only a PR narrows to what it changed. push and schedule run every suite, so
-          # a tool absorbed months ago still proves it works on the current image.
           BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
         run: |
-          # An unborn or force-pushed base leaves nothing to diff against; test everything.
           if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
             CHANGED=$(git ls-files)
           else
@@ -134,9 +112,6 @@ jobs:
           TOOLS=$(printf '%s\n' "$CHANGED" |
             sed -n 's|^tools/\([^/]*\)/.*|\1|p' | sort -u |
             while IFS= read -r tool; do
-              # A tool whose suite cannot be a shell script opts out in writing, and the
-              # file has to say which named jobs cover it. Anything else with no run.sh
-              # still fails the matrix below, which is the point.
               if [ -d "tools/$tool" ] && [ ! -f "tools/$tool/test/ACTION-LEVEL" ]; then
                 printf '%s\n' "$tool"
               fi
@@ -149,8 +124,6 @@ jobs:
     needs: changes
     if: needs.changes.outputs.tools != '[]'
     runs-on: ubuntu-slim
-    # The dashes suite alone is ~40 cases run twice, each doing a git init plus
-    # commits plus a perl scan. Upstream gave it 10 on the same runner tier.
     timeout-minutes: 10
     strategy:
       fail-fast: false
@@ -165,7 +138,6 @@ jobs:
         env:
           TOOL: ${{ matrix.tool }}
         run: |
-          # Absorbing a tool means dropping in its suite here; this job needs no edit.
           if [ ! -x "tools/$TOOL/test/run.sh" ]; then
             echo "::error::tools/$TOOL has no executable test/run.sh"; exit 1
           fi

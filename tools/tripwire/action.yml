@@ -16,8 +16,6 @@ inputs:
 runs:
   using: composite
   steps:
-    # The scan reads the CALLER's git-tracked files in $GITHUB_WORKSPACE, so the
-    # calling job must have checked out its own code first.
     - shell: bash
       env:
         TRIPWIRE_ALLOW: ${{ inputs.allow-globs }}

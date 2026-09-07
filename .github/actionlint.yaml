@@ -1,7 +1,4 @@
-# fleet-ci.yml is the only workflow in the fleet that uses `$/`, the same-repo
-# action reference GitHub shipped after actionlint 1.15 froze its `uses:` grammar.
-# The merge in fleet-ci's actionlint step folds this file into the fleet config,
-# so consumers keep their own and never inherit this suppression.
+# actionlint 1.15 predates GitHub's same-repository `$/` action reference.
 paths:
   .github/workflows/fleet-ci.yml:
     ignore:

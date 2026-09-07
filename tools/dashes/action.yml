@@ -27,8 +27,6 @@ inputs:
 runs:
   using: composite
   steps:
-    # Empty base-ref resolves the base as HEAD^1 of the merge ref, which depth 2
-    # carries. A set base-ref names a branch the checkout must have fetched.
     - shell: bash
       env:
         BASE_REF: ${{ inputs.base-ref }}
