@@ -14,13 +14,13 @@ jobs:
   fleet-ci:
     uses: ./.github/workflows/fleet-ci.yml
     with:
-      # Absorbed in step 2.
       betterleaks: false
       tripwire: false
       wormhook: false
       pnpm-pin: false
-      # Absorbed in step 4.
-      dashes: false
+      # Dogfood the dash gate at its strictest setting. Nothing else proves the
+      # built-in hold-out list is a convenience rather than a blind spot.
+      dash-exclude-defaults: false
 
   actionlint-pin:
     runs-on: ubuntu-slim
@@ -86,7 +86,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.tools != '[]'
     runs-on: ubuntu-slim
-    timeout-minutes: 5
+    # The dashes suite alone is ~40 cases run twice, each doing a git init plus
+    # commits plus a perl scan. Upstream gave it 10 on the same runner tier.
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:

@@ -1,0 +1,45 @@
+name: dash-ratchet
+description: >-
+  Diff-scoped unicode-dash gate for pull requests: no dash on a line the PR
+  adds, and the repo-wide total may only fall.
+branding:
+  icon: minus
+  color: gray-dark
+inputs:
+  base-ref:
+    description: >-
+      Override the base branch, without the origin/ prefix. Leave empty to
+      resolve it from the event, which is what allows a shallow checkout.
+    default: ""
+  exclude:
+    description: Paths held out of the rule, one git pathspec per line.
+    default: ""
+  force-zero:
+    description: >-
+      Require zero dashes in the checkout instead of ratcheting a count down.
+      No base ref and no second tree, so a depth-1 checkout is enough.
+    default: "false"
+  exclude-defaults:
+    description: >-
+      Apply the built-in hold-out list (lockfiles, vendored trees, agent
+      context, upstream licenses). Set false to gate those paths too.
+    default: "true"
+runs:
+  using: composite
+  steps:
+    # Empty base-ref resolves the base as HEAD^1 of the merge ref, which depth 2
+    # carries. A set base-ref names a branch the checkout must have fetched.
+    - shell: bash
+      env:
+        BASE_REF: ${{ inputs.base-ref }}
+        DASH_EXCLUDE: ${{ inputs.exclude }}
+        DASH_EXCLUDE_DEFAULTS: ${{ inputs.exclude-defaults }}
+        FORCE_ZERO: ${{ inputs.force-zero }}
+      run: |
+        ARGS=()
+        if [ "${FORCE_ZERO}" = "true" ]; then
+          ARGS+=(--force-zero)
+        elif [ -n "${BASE_REF}" ]; then
+          ARGS+=("origin/${BASE_REF}")
+        fi
+        "${GITHUB_ACTION_PATH}/scripts/check-dashes.sh" "${ARGS[@]}"

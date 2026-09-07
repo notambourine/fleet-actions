@@ -43,6 +43,10 @@ on:
         type: number
         default: 0
 
+      dash-base-ref:
+        description: Base branch for the ratchet, without the origin/ prefix. Empty resolves it from the event.
+        type: string
+        default: ""
       dash-exclude:
         description: Newline-separated glob pathspecs added to the built-in hold-out list.
         type: string
@@ -76,56 +80,56 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  betterleaks:
-    if: inputs.betterleaks
-    runs-on: ubuntu-slim
-    timeout-minutes: 5
+  # One job, tools as steps. Seven jobs meant seven runner spin-ups and seven
+  # checkouts per commit in every consumer, and a skipped job never reports, so a
+  # consumer running a subset had no stable set of check names to require. One job
+  # whose STEPS skip always reports one name.
+  fleet:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - name: not yet absorbed
+      # One checkout serves everything: depth 0 is a superset of betterleaks' full
+      # history and of the dash ratchet's depth 2, which exists only to reach HEAD^1.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: ${{ inputs.fetch-depth }}
+          persist-credentials: false
+
+      # !cancelled() on every gate: without it one failing tool hides every tool
+      # after it, and chaining turns a fan-out into whack-a-mole.
+      - name: betterleaks
+        if: ${{ inputs.betterleaks && !cancelled() }}
         run: |
           echo "::error::betterleaks is not in fleet-ci yet. Keep this repo's own betterleaks job and pass betterleaks: false."
           exit 1
 
-  zizmor:
-    if: inputs.zizmor
-    runs-on: ubuntu-slim
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
       - id: cache-week
+        if: ${{ inputs.zizmor && !cancelled() }}
         run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        if: ${{ inputs.zizmor && !cancelled() }}
         with:
-          # This job runs only `uvx zizmor`, so the repo's own dependency files are
+          # This step runs only `uvx zizmor`, so the repo's own dependency files are
           # not its inputs and the default glob would key the tool cache on them.
           cache-dependency-glob: ""
           # zizmor floats: rotate weekly, or the first entry freezes and every later
           # release downloads anyway while the stale one keeps restoring.
           cache-suffix: ${{ steps.cache-week.outputs.week }}
       - name: zizmor workflow audit
+        if: ${{ inputs.zizmor && !cancelled() }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: uvx zizmor --min-severity=medium .github/workflows
 
-  actionlint:
-    if: inputs.actionlint
-    # kjanat/actionlint is a Docker action and needs a daemon, which ubuntu-slim
-    # lacks. The runner tier is forced by the action shape, not by the workload.
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
       - name: fleet actionlint config
+        if: ${{ inputs.actionlint && !cancelled() }}
         env:
           EXTRA_LABELS: ${{ inputs.actionlint-extra-labels }}
           CONFIG_EXTRA: ${{ inputs.actionlint-config-extra }}
         run: |
           # actionlint rejects runner labels it does not know, and the fleet's cheap
-          # tier is newer than its built-in list.
+          # tier is newer than its built-in list. The label list describes the
+          # CALLER's workflows, which may still target ubuntu-slim.
           {
             echo "self-hosted-runner:"
             echo "  labels:"
@@ -163,46 +167,36 @@ jobs:
       # A `# v1.15.1` label would mean the sha came from the release tag, which leaves
       # the image on a mutable GHCR tag.
       - uses: kjanat/actionlint@e7434e3127c1c4645bad1d6476f48d4b52a29c29 # v1.15
+        if: ${{ inputs.actionlint && !cancelled() }}
         with:
           format: github
           config-file: .actionlint-fleet.yml
 
-  dashes:
-    if: inputs.dashes
-    runs-on: ubuntu-slim
-    timeout-minutes: 5
-    steps:
-      - name: not yet absorbed
-        run: |
-          echo "::error::dashes is not in fleet-ci yet. Keep this repo's own dash-ratchet call and pass dashes: false."
-          exit 1
+      # $/ resolves to this repo at the ref the caller pinned, so the tool runs from
+      # the same commit as the workflow without vendoring it into the caller's tree.
+      - name: dashes
+        if: ${{ inputs.dashes && !cancelled() }}
+        uses: $/tools/dashes
+        with:
+          base-ref: ${{ inputs.dash-base-ref }}
+          exclude: ${{ inputs.dash-exclude }}
+          exclude-defaults: ${{ inputs.dash-exclude-defaults }}
+          force-zero: ${{ inputs.dash-force-zero }}
 
-  tripwire:
-    if: inputs.tripwire
-    runs-on: ubuntu-slim
-    timeout-minutes: 5
-    steps:
-      - name: not yet absorbed
+      - name: tripwire
+        if: ${{ inputs.tripwire && !cancelled() }}
         run: |
           echo "::error::tripwire is not in fleet-ci yet. Keep this repo's own shai-hulud-tripwire call and pass tripwire: false."
           exit 1
 
-  wormhook:
-    if: inputs.wormhook
-    runs-on: ubuntu-slim
-    timeout-minutes: 5
-    steps:
-      - name: not yet wired
+      - name: wormhook
+        if: ${{ inputs.wormhook && !cancelled() }}
         run: |
           echo "::error::wormhook is not in fleet-ci yet. Pass wormhook: false."
           exit 1
 
-  pnpm-pin:
-    if: inputs.pnpm-pin
-    runs-on: ubuntu-slim
-    timeout-minutes: 5
-    steps:
-      - name: not yet implemented
+      - name: pnpm-pin
+        if: ${{ inputs.pnpm-pin && !cancelled() }}
         run: |
           echo "::error::pnpm-pin is not in fleet-ci yet. Pass pnpm-pin: false."
           exit 1

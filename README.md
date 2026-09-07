@@ -22,15 +22,18 @@ jobs:
     uses: notambourine/fleet-actions/.github/workflows/fleet-ci.yml@<sha> # v1
     with:
       betterleaks: false
-      dashes: false
       tripwire: false
       wormhook: false
       pnpm-pin: false
 ```
 
-The example runs zizmor and actionlint. Keep existing jobs for the five unfinished
-checks; enabling those inputs currently fails. Every tool defaults on, so pass
-`false` for each check you need to skip.
+The example runs zizmor, actionlint, and the dash ratchet. Keep existing jobs for the
+four unfinished checks; enabling those inputs currently fails. Every tool defaults on,
+so pass `false` for each check you need to skip.
+
+Every tool runs as a step of one job, so this reports one check, `<calling job> / fleet`
+(`fleet / fleet` above), no matter which subset a repo enables. That is the single name to
+require in branch protection. A skipped step still reports; a skipped job never did.
 
 ## Resolve the pin
 
@@ -55,7 +58,8 @@ Write `@$sha # v1`. Never write `@v1`.
 | `wormhook` | `true` | npm supply-chain malware scan. |
 | `pnpm-pin` | `true` | Assert `package.json` declares `packageManager`. |
 | `scan-mode` | `git` | betterleaks subcommand. `git` fingerprints commits; `dir` scans the tree. |
-| `fetch-depth` | `0` | Checkout depth. `scan-mode: git` requires `0`. |
+| `fetch-depth` | `0` | Checkout depth for the one shared checkout. `scan-mode: git` requires `0`. |
+| `dash-base-ref` | `""` | Base branch for the ratchet, without `origin/`. Empty resolves it from the event. |
 | `dash-exclude` | `""` | Glob pathspecs added to the built-in hold-out list, one per line. |
 | `dash-exclude-defaults` | `true` | Set `false` to gate the held-out paths like everything else. |
 | `dash-force-zero` | `false` | Assert the tree carries no dash instead of ratcheting. |
@@ -70,17 +74,31 @@ drop its suppressions. Label lists union; the caller's file wins on conflicts, a
 
 These stopped being prose each repo restates:
 
-- `timeout-minutes: 5` on every job.
+- One `ubuntu-latest` job, `timeout-minutes: 15`, every tool a step. One runner spin-up
+  and one checkout instead of one per tool.
+- Every gate step carries `!cancelled()`, so a failing tool never hides the tools after it.
 - Workflow-level `contents: read`, no job-level permissions.
-- `persist-credentials: false` on every checkout; `fetch-depth: 0` only where history is an input.
+- One checkout at the caller's `fetch-depth` (default `0`), `persist-credentials: false`.
+  Depth 0 is a superset of what betterleaks and the dash ratchet each need.
 - Every action pinned `@<40-char-sha> # <tag>`, resolved from a release tag to its commit.
-- `ubuntu-slim` everywhere except where the tool forbids it. betterleaks needs `envsubst` for
-  cosign; `kjanat/actionlint` is a Docker action and needs a daemon.
 - `setup-uv` with a blank `cache-dependency-glob` and a weekly `cache-suffix` rotation.
 - One concurrency group per calling repo, calling workflow, and ref, cancelling only on
   pull requests.
 
+`ubuntu-slim` stays declared to actionlint because the caller's own workflows may target
+it. It is no longer the runner tier here: two tools already forbade it (betterleaks needs
+`envsubst` for cosign, `kjanat/actionlint` is a Docker action needing a daemon).
+
 ## Status
 
-`zizmor` and `actionlint` run. The rest fail with a message naming the input to disable until
-they are absorbed.
+`zizmor`, `actionlint`, and `dashes` run. The rest fail with a message naming the input to
+disable until they are absorbed.
+
+## Tools
+
+| Directory | What it is |
+| --- | --- |
+| `tools/dashes` | The unicode-dash ratchet, absorbed from `dash-ratchet`. `test/run.sh` runs ~40 cases twice, under the ambient locale and under `LC_ALL=C`. |
+
+`self-test.yml` discovers `tools/<name>/test/run.sh` and runs it when `tools/<name>/` changed,
+so absorbing a tool drops in a directory and edits no workflow.
