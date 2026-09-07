@@ -1,0 +1,73 @@
+name: self-test
+
+# fleet-ci gates its own repo, and each absorbed tool runs its own suite only when
+# its directory changed.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  fleet-ci:
+    uses: ./.github/workflows/fleet-ci.yml
+    with:
+      # Absorbed in step 2.
+      betterleaks: false
+      tripwire: false
+      wormhook: false
+      pnpm-pin: false
+      # Absorbed in step 4.
+      dashes: false
+
+  changes:
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    outputs:
+      tools: ${{ steps.detect.outputs.tools }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: detect
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          # An unborn or force-pushed base leaves nothing to diff against; test everything.
+          if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            CHANGED=$(git ls-files)
+          else
+            CHANGED=$(git diff --name-only "$BASE" HEAD)
+          fi
+          TOOLS=$(printf '%s\n' "$CHANGED" |
+            sed -n 's|^tools/\([^/]*\)/.*|\1|p' | sort -u |
+            jq -R . | jq -sc .)
+          echo "tools=$TOOLS" >> "$GITHUB_OUTPUT"
+          echo "changed tool suites: $TOOLS"
+
+  tools:
+    needs: changes
+    if: needs.changes.outputs.tools != '[]'
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        tool: ${{ fromJSON(needs.changes.outputs.tools) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: ${{ matrix.tool }} suite
+        env:
+          TOOL: ${{ matrix.tool }}
+        run: |
+          # Absorbing a tool means dropping in its suite here; this job needs no edit.
+          if [ ! -x "tools/$TOOL/test/run.sh" ]; then
+            echo "::error::tools/$TOOL has no executable test/run.sh"; exit 1
+          fi
+          "tools/$TOOL/test/run.sh"

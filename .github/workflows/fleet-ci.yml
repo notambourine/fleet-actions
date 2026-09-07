@@ -1,0 +1,187 @@
+name: fleet-ci
+
+# The fleet's CI surface as one reusable workflow. Call sites and inputs:
+# https://github.com/notambourine/fleet-actions
+on:
+  workflow_call:
+    inputs:
+      betterleaks:
+        description: Secret scan over history or tree.
+        type: boolean
+        default: true
+      zizmor:
+        description: Workflow audit, medium severity and above.
+        type: boolean
+        default: true
+      actionlint:
+        description: Workflow static check with ShellCheck and pyflakes.
+        type: boolean
+        default: true
+      dashes:
+        description: Unicode dash ratchet on pull requests.
+        type: boolean
+        default: true
+      tripwire:
+        description: Shai-Hulud worm fail-fast gate.
+        type: boolean
+        default: true
+      wormhook:
+        description: npm supply-chain malware scan.
+        type: boolean
+        default: true
+      pnpm-pin:
+        description: Assert package.json declares packageManager.
+        type: boolean
+        default: true
+
+      scan-mode:
+        description: betterleaks subcommand, git or dir. git fingerprints commits.
+        type: string
+        default: git
+      fetch-depth:
+        description: Checkout depth. betterleaks git needs the full history.
+        type: number
+        default: 0
+
+      dash-exclude:
+        description: Newline-separated glob pathspecs added to the built-in hold-out list.
+        type: string
+        default: ""
+      dash-exclude-defaults:
+        description: Gate the built-in hold-out paths like everything else when false.
+        type: boolean
+        default: true
+      dash-force-zero:
+        description: Assert the tree carries no dash instead of ratcheting.
+        type: boolean
+        default: false
+
+      actionlint-extra-labels:
+        description: Newline-separated runner labels this repo uses beyond the fleet set.
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  # github.repository is the CALLER here, so one group per calling repo and ref.
+  group: fleet-ci-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  betterleaks:
+    if: inputs.betterleaks
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    steps:
+      - name: not yet absorbed
+        run: |
+          echo "::error::betterleaks is not in fleet-ci yet. Keep this repo's own betterleaks job and pass betterleaks: false."
+          exit 1
+
+  zizmor:
+    if: inputs.zizmor
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: cache-week
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          # This job runs only `uvx zizmor`, so the repo's own dependency files are
+          # not its inputs and the default glob would key the tool cache on them.
+          cache-dependency-glob: ""
+          # zizmor floats: rotate weekly, or the first entry freezes and every later
+          # release downloads anyway while the stale one keeps restoring.
+          cache-suffix: ${{ steps.cache-week.outputs.week }}
+      - name: zizmor workflow audit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Capture zizmor findings as JSON, then apply the fleet severity policy.
+          OUT=$(uvx zizmor --format json --min-severity=medium .github/workflows || true)
+          if ! jq -e 'type == "array"' <<<"$OUT" >/dev/null 2>&1; then
+            echo "::error::zizmor returned no valid JSON"; exit 1
+          fi
+          HITS="$OUT"
+          N=$(jq 'length' <<<"$HITS")
+          if [ "$N" -gt 0 ]; then
+            jq -r 'group_by(.ident) | map("\(.[0].ident)x\(length)") | join(", ")' <<<"$HITS"
+            echo "::error::zizmor found $N medium+ workflow finding(s)"; exit 1
+          fi
+
+  actionlint:
+    if: inputs.actionlint
+    # kjanat/actionlint is a Docker action and needs a daemon, which ubuntu-slim
+    # lacks. The runner tier is forced by the action shape, not by the workload.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: fleet actionlint config
+        env:
+          EXTRA_LABELS: ${{ inputs.actionlint-extra-labels }}
+        run: |
+          # actionlint rejects runner labels it does not know, and the fleet's cheap
+          # tier is newer than its built-in list.
+          {
+            echo "self-hosted-runner:"
+            echo "  labels:"
+            echo "    - ubuntu-slim"
+            printf '%s\n' "$EXTRA_LABELS" | while IFS= read -r label; do
+              [ -n "$label" ] && echo "    - $label"
+            done
+          } > "${RUNNER_TEMP}/actionlint.yml"
+      # Resolved from the floating v1.15 tag, whose action.yml pins the image BY DIGEST.
+      # A `# v1.15.1` label would mean the sha came from the release tag, which leaves
+      # the image on a mutable GHCR tag.
+      - uses: kjanat/actionlint@e7434e3127c1c4645bad1d6476f48d4b52a29c29 # v1.15
+        with:
+          format: github
+          config-file: ${{ runner.temp }}/actionlint.yml
+
+  dashes:
+    if: inputs.dashes
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    steps:
+      - name: not yet absorbed
+        run: |
+          echo "::error::dashes is not in fleet-ci yet. Keep this repo's own dash-ratchet call and pass dashes: false."
+          exit 1
+
+  tripwire:
+    if: inputs.tripwire
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    steps:
+      - name: not yet absorbed
+        run: |
+          echo "::error::tripwire is not in fleet-ci yet. Keep this repo's own shai-hulud-tripwire call and pass tripwire: false."
+          exit 1
+
+  wormhook:
+    if: inputs.wormhook
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    steps:
+      - name: not yet wired
+        run: |
+          echo "::error::wormhook is not in fleet-ci yet. Pass wormhook: false."
+          exit 1
+
+  pnpm-pin:
+    if: inputs.pnpm-pin
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    steps:
+      - name: not yet implemented
+        run: |
+          echo "::error::pnpm-pin is not in fleet-ci yet. Pass pnpm-pin: false."
+          exit 1

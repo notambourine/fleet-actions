@@ -1,0 +1,29 @@
+name: release
+
+# Cutting a release is `git tag v1.N && git push origin v1.N`. This moves the floating
+# v1 that consumers resolve their pin from. The v1.* pattern never matches v1 itself,
+# so moving it cannot retrigger this workflow.
+on:
+  push:
+    tags: ["v1.*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    steps:
+      - name: move v1 and publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          # PATCH fails when v1 does not exist yet, so fall back to creating it.
+          gh api -X PATCH "repos/$REPO/git/refs/tags/v1" -f sha="$SHA" -F force=true ||
+            gh api -X POST "repos/$REPO/git/refs" -f ref=refs/tags/v1 -f sha="$SHA"
+          gh release create "$TAG" --repo "$REPO" --generate-notes --title "$TAG"
+          echo "v1 -> $SHA ($TAG)"
