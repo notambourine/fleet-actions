@@ -6,6 +6,10 @@ on:
   pull_request:
   push:
     branches: [main]
+  schedule:
+    # Path filtering means a tool's suite may never run again after the commit that
+    # absorbed it, which makes runner image drift and bash/perl/git upgrades invisible.
+    - cron: "23 11 * * 1,4"
 
 permissions:
   contents: read
@@ -117,7 +121,9 @@ jobs:
           persist-credentials: false
       - id: detect
         env:
-          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          # Only a PR narrows to what it changed. push and schedule run every suite, so
+          # a tool absorbed months ago still proves it works on the current image.
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
         run: |
           # An unborn or force-pushed base leaves nothing to diff against; test everything.
           if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
