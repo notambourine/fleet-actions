@@ -20,14 +20,17 @@ permissions:
 jobs:
   fleet:
     uses: notambourine/fleet-actions/.github/workflows/fleet-ci.yml@<sha> # v1
-```
-
-Every tool defaults on. Skip one by naming it:
-
-```yaml
     with:
+      betterleaks: false
       dashes: false
+      tripwire: false
+      wormhook: false
+      pnpm-pin: false
 ```
+
+The example runs zizmor and actionlint. Keep existing jobs for the five unfinished
+checks; enabling those inputs currently fails. Every tool defaults on, so pass
+`false` for each check you need to skip.
 
 ## Resolve the pin
 
@@ -74,4 +77,4 @@ These stopped being prose each repo restates:
 ## Status
 
 `zizmor` and `actionlint` run. The rest fail with a message naming the input to disable until
-they are absorbed. See `PLAN.md`.
+they are absorbed.
