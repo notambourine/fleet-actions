@@ -101,18 +101,7 @@ jobs:
       - name: zizmor workflow audit
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Capture zizmor findings as JSON, then apply the fleet severity policy.
-          OUT=$(uvx zizmor --format json --min-severity=medium .github/workflows || true)
-          if ! jq -e 'type == "array"' <<<"$OUT" >/dev/null 2>&1; then
-            echo "::error::zizmor returned no valid JSON"; exit 1
-          fi
-          HITS="$OUT"
-          N=$(jq 'length' <<<"$HITS")
-          if [ "$N" -gt 0 ]; then
-            jq -r 'group_by(.ident) | map("\(.[0].ident)x\(length)") | join(", ")' <<<"$HITS"
-            echo "::error::zizmor found $N medium+ workflow finding(s)"; exit 1
-          fi
+        run: uvx zizmor --min-severity=medium .github/workflows
 
   actionlint:
     if: inputs.actionlint
