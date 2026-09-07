@@ -119,19 +119,19 @@ jobs:
           log-opts: ${{ inputs.betterleaks-log-opts }}
           pr-range: ${{ inputs.betterleaks-pr-range }}
 
-      - id: cache-week
-        if: ${{ inputs.zizmor && !cancelled() }}
-        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-        if: ${{ inputs.zizmor && !cancelled() }}
-        with:
-          cache-dependency-glob: ""
-          cache-suffix: ${{ steps.cache-week.outputs.week }}
+      # The action vendors a version-to-digest table, so this sha pins the zizmor image itself.
+      # uvx resolved zizmor and its tree from PyPI at run time, which no bot could gate.
       - name: zizmor workflow audit
         if: ${{ inputs.zizmor && !cancelled() }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: uvx zizmor --min-severity=medium .github/workflows
+        uses: zizmorcore/zizmor-action@70fb788f84895a7701f5643d103d587e460b5c99 # v0.6.3
+        with:
+          inputs: .github/workflows
+          min-severity: medium
+          # SARIF upload would need security-events: write from every caller and would move
+          # findings off the fleet check. Fail the job instead.
+          advanced-security: false
+          online-audits: false
+          annotations: true
 
       - name: fleet actionlint config
         if: ${{ inputs.actionlint && !cancelled() }}
