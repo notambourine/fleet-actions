@@ -21,15 +21,12 @@ jobs:
   fleet:
     uses: notambourine/fleet-actions/.github/workflows/fleet-ci.yml@<sha> # v1.0
     with:
-      betterleaks: false
       tripwire: false
-      wormhook: false
-      pnpm-pin: false
 ```
 
-The example runs zizmor, actionlint, and the dash ratchet. Keep existing jobs for the
-four unfinished checks; enabling those inputs currently fails. Every tool defaults on,
-so pass `false` for each check you need to skip.
+The example runs everything but `tripwire`, which is the last check still unabsorbed;
+enabling it currently fails. Every tool defaults on, so pass `false` for each check you
+need to skip.
 
 Every tool runs as a step of one job, so this reports one check, `<calling job> / fleet`
 (`fleet / fleet` above), no matter which subset a repo enables. That is the single name to
@@ -67,6 +64,10 @@ the audit finally agree.
 | `pnpm-pin` | `true` | Assert `package.json` declares `packageManager`. |
 | `scan-mode` | `git` | betterleaks subcommand. `git` fingerprints commits; `dir` scans the tree. |
 | `fetch-depth` | `0` | Checkout depth for the one shared checkout. `scan-mode: git` requires `0`. |
+| `betterleaks-version` | `latest` | Pin an exact betterleaks release when an upstream rule turns the fleet red. |
+| `betterleaks-path` | `""` | Path to scan. Empty scans the workspace root. |
+| `betterleaks-log-opts` | `""` | `git log` arguments narrowing a `git` scan. Beats `betterleaks-pr-range`. |
+| `betterleaks-pr-range` | `false` | On `pull_request`, scan only the pull request's commits. |
 | `dash-base-ref` | `""` | Base branch for the ratchet, without `origin/`. Empty resolves it from the event. |
 | `dash-exclude` | `""` | Glob pathspecs added to the built-in hold-out list, one per line. |
 | `dash-exclude-defaults` | `true` | Set `false` to gate the held-out paths like everything else. |
@@ -99,14 +100,19 @@ it. It is no longer the runner tier here: two tools already forbade it (betterle
 
 ## Status
 
-`zizmor`, `actionlint`, and `dashes` run. The rest fail with a message naming the input to
-disable until they are absorbed.
+Everything runs except `tripwire`, which fails with a message naming the input to disable
+until it is absorbed.
 
 ## Tools
 
 | Directory | What it is |
 | --- | --- |
+| `tools/betterleaks` | Secret scan from a cosign-verified release, absorbed from `betterleaks-action`. Tested by named jobs in `self-test.yml`, not a `run.sh`. |
 | `tools/dashes` | The unicode-dash ratchet, absorbed from `dash-ratchet`. `test/run.sh` runs ~40 cases twice, under the ambient locale and under `LC_ALL=C`. |
+| `tools/pnpm-pin` | Asserts the root `package.json` pins an exact `packageManager`. |
+
+`wormhook` stays an external pinned action. It ships a Claude Code plugin that
+`notambourine/claude` consumes, so absorbing it would freeze its pattern updates.
 
 `self-test.yml` discovers `tools/<name>/test/run.sh` and runs it when `tools/<name>/` changed,
 so absorbing a tool drops in a directory and edits no workflow.

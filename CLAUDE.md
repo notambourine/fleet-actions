@@ -6,7 +6,9 @@ their next pin bump, so treat every change here as a change to every repo.
 ## Rules
 
 - Never flip a tool from stub to live in a change that does not also add its suite.
-  A green board over a dead gate is the one failure this repo cannot ship.
+  A green board over a dead gate is the one failure this repo cannot ship. A suite has to
+  prove the gate FAILS on a planted positive; "clean repo passes" proves nothing. The only
+  exemption is wormhook, which keeps its suite in its own repo.
 - Keep the tree free of unicode dashes. The repo dogfoods its own dash gate at
   `exclude-defaults: false`, and the built-in hold-out list does not cover `README.md`
   or `*.sh`. Absorb inbound code by de-dashing it, never by excluding its path.

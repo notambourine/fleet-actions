@@ -1,0 +1,17 @@
+name: pnpm-pin
+description: Assert the root package.json pins an exact packageManager version.
+branding:
+  icon: lock
+  color: gray-dark
+inputs:
+  path:
+    description: Directory holding the root package.json. Defaults to the workspace root.
+    default: ""
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        PIN_PATH: ${{ inputs.path }}
+      run: |
+        "${GITHUB_ACTION_PATH}/scripts/check-package-manager.sh" "${PIN_PATH:-$GITHUB_WORKSPACE}"

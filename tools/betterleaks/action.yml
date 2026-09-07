@@ -1,0 +1,168 @@
+name: betterleaks secret scan
+description: >-
+  Run betterleaks against the checked-out repository from a cosign-verified,
+  sha256-checked release. Resolves the latest release each run by default.
+author: NoTambourine LLC
+branding:
+  icon: eye-off
+  color: red
+
+inputs:
+  version:
+    description: >-
+      Release to run: "latest" (default) or an exact release such as 1.8.1 / v1.8.1.
+      Verification is identical either way; latest keeps the ruleset current.
+    required: false
+    default: latest
+  scan:
+    description: >-
+      "git" walks commit history and needs fetch-depth: 0; "dir" scans the worktree only.
+    required: false
+    default: git
+  path:
+    description: Path to scan. Defaults to the workspace root.
+    required: false
+    default: ""
+  confidence:
+    description: Minimum confidence for a finding to fail the job (low, medium, high).
+    required: false
+    default: medium
+  redact:
+    description: Percent of each matched secret to redact in the log (0-100).
+    required: false
+    default: "100"
+  log-opts:
+    description: >-
+      git log arguments narrowing a "git" scan, e.g. "--no-merges A..B". Takes
+      precedence over pr-range.
+    required: false
+    default: ""
+  pr-range:
+    description: On pull_request, scan only the pull request's commits.
+    required: false
+    default: "false"
+  install-cosign:
+    description: Set false when the calling job already installed cosign.
+    required: false
+    default: "true"
+  token:
+    description: Token used to resolve and download the betterleaks release.
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  version:
+    description: The betterleaks release that ran, e.g. v1.8.1.
+    value: ${{ steps.install.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    # Pinned while betterleaks itself is not: cosign is a build tool, and a frozen
+    # scanner ruleset is exactly what "latest" exists to avoid.
+    - if: inputs.install-cosign == 'true'
+      uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+    - name: Install betterleaks
+      id: install
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        BL_VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        repo=betterleaks/betterleaks
+
+        if [ "$BL_VERSION" = latest ]; then
+          tag=$(gh release view -R "$repo" --json tagName -q .tagName)
+        elif [[ "$BL_VERSION" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          tag="v${BL_VERSION#v}"
+        else
+          echo "::error::version must be 'latest' or a release like 1.8.1 (got '$BL_VERSION')"
+          exit 1
+        fi
+
+        case "$RUNNER_OS" in
+          Linux) os=linux ;;
+          macOS) os=darwin ;;
+          *) echo "::error::unsupported runner OS '$RUNNER_OS' (Linux or macOS)"; exit 1 ;;
+        esac
+        case "$RUNNER_ARCH" in
+          X64) arch=x64 ;;
+          ARM64) arch=arm64 ;;
+          *) echo "::error::unsupported runner arch '$RUNNER_ARCH' (X64 or ARM64)"; exit 1 ;;
+        esac
+        slug="${os}_${arch}"
+
+        # Unpack outside the workspace: a compressed Go binary is exactly the entropy
+        # a secret scanner flags.
+        dir="${RUNNER_TEMP}/betterleaks-${tag}-${slug}"
+        mkdir -p "$dir"
+        cd "$dir"
+        gh release download "$tag" -R "$repo" --clobber \
+          -p "betterleaks_*_${slug}.tar.gz" -p checksums.txt -p checksums.txt.sigstore.json
+
+        # Never pipe cosign: a pipe would let a verify failure reach the scan step on
+        # an unverified binary if pipefail is ever lost.
+        cosign verify-blob --bundle checksums.txt.sigstore.json \
+          --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+          --certificate-identity "https://github.com/${repo}/.github/workflows/release.yml@refs/tags/${tag}" \
+          checksums.txt
+        if command -v sha256sum >/dev/null 2>&1; then
+          grep "_${slug}.tar.gz" checksums.txt | sha256sum -c -
+        else
+          grep "_${slug}.tar.gz" checksums.txt | shasum -a 256 -c -
+        fi
+
+        tar -xzf betterleaks_*_"${slug}".tar.gz betterleaks
+        printf 'version=%s\n' "$tag" >> "$GITHUB_OUTPUT"
+        printf 'bin=%s\n' "$dir/betterleaks" >> "$GITHUB_OUTPUT"
+        echo "betterleaks $tag verified ($slug)"
+
+    - name: betterleaks scan
+      shell: bash
+      env:
+        BL_BIN: ${{ steps.install.outputs.bin }}
+        BL_SCAN: ${{ inputs.scan }}
+        BL_PATH: ${{ inputs.path }}
+        BL_CONFIDENCE: ${{ inputs.confidence }}
+        BL_REDACT: ${{ inputs.redact }}
+        BL_LOG_OPTS: ${{ inputs.log-opts }}
+        BL_PR_RANGE: ${{ inputs.pr-range }}
+        BL_PR_BASE: ${{ github.event.pull_request.base.sha }}
+        BL_PR_HEAD: ${{ github.event.pull_request.head.sha }}
+      run: |
+        set -euo pipefail
+        target="${BL_PATH:-$GITHUB_WORKSPACE}"
+
+        case "$BL_SCAN" in
+          git|dir) ;;
+          *) echo "::error::scan must be 'git' or 'dir' (got '$BL_SCAN')"; exit 1 ;;
+        esac
+        [[ "$BL_CONFIDENCE" =~ ^(low|medium|high)$ ]] ||
+          { echo "::error::confidence must be low, medium, or high (got '$BL_CONFIDENCE')"; exit 1; }
+        [[ "$BL_REDACT" =~ ^(100|[0-9]{1,2})$ ]] ||
+          { echo "::error::redact must be 0-100 (got '$BL_REDACT')"; exit 1; }
+
+        log_opts="$BL_LOG_OPTS"
+        if [ -z "$log_opts" ] && [ "$BL_PR_RANGE" = true ] && [ -n "$BL_PR_BASE" ]; then
+          log_opts="--no-merges ${BL_PR_BASE}..${BL_PR_HEAD}"
+        fi
+
+        if [ "$BL_SCAN" = git ]; then
+          if [ "$(git -C "$target" rev-parse --is-shallow-repository)" = true ]; then
+            echo "::error::scan: git reads commit history; set fetch-depth: 0 on actions/checkout"
+            exit 1
+          fi
+        elif [ -n "$log_opts" ]; then
+          echo "::warning::log-opts and pr-range apply to scan: git only; ignored"
+          log_opts=""
+        fi
+
+        # --redact keeps a finding out of a public log; validation stays off so no
+        # candidate secret is sent to a vendor API.
+        args=("$BL_SCAN" "$target" --no-banner "--redact=$BL_REDACT" --confidence "$BL_CONFIDENCE")
+        if [ -n "$log_opts" ]; then
+          args+=("--log-opts=$log_opts")
+        fi
+        "$BL_BIN" "${args[@]}"

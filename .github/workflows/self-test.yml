@@ -14,13 +14,68 @@ jobs:
   fleet-ci:
     uses: ./.github/workflows/fleet-ci.yml
     with:
-      betterleaks: false
       tripwire: false
-      wormhook: false
-      pnpm-pin: false
       # Dogfood the dash gate at its strictest setting. Nothing else proves the
       # built-in hold-out list is a convenience rather than a blind spot.
       dash-exclude-defaults: false
+
+  # betterleaks cannot be a tools/<name>/test/run.sh. Both cases below assert
+  # behavior that only exists through `uses:`, and pinned-version asserts a step
+  # OUTPUT. The discovered-script slot cannot express either.
+  betterleaks-self-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./tools/betterleaks
+
+  # Proves the explicit-version path verifies and runs the same way, which is the
+  # escape hatch a consumer reaches for when an upstream rule turns the fleet red.
+  betterleaks-pinned-version:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: scan
+        uses: ./tools/betterleaks
+        with:
+          version: "1.8.0"
+          scan: dir
+      - name: Assert the requested release ran
+        env:
+          RESOLVED: ${{ steps.scan.outputs.version }}
+        run: |
+          [ "$RESOLVED" = v1.8.0 ] || { echo "::error::ran $RESOLVED, expected v1.8.0"; exit 1; }
+
+  betterleaks-shellcheck:
+    # yq and shellcheck are preinstalled here; ubuntu-slim would need apt for both.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: ShellCheck the composite steps
+        run: |
+          # The action's whole product is embedded bash; extract each run: block so a
+          # broken edit fails here instead of in a consumer's CI.
+          n=$(yq '[.runs.steps[] | select(has("run"))] | length' tools/betterleaks/action.yml)
+          for i in $(seq 0 $((n - 1))); do
+            {
+              echo '#!/usr/bin/env bash'
+              # The runner exports GITHUB_*/RUNNER_*/BL_* into the step, so SC2154 is
+              # noise here and every other check stays on.
+              echo '# shellcheck disable=SC2154'
+              yq "[.runs.steps[] | select(has(\"run\"))][$i].run" tools/betterleaks/action.yml
+            } > "${RUNNER_TEMP}/step-$i.sh"
+            shellcheck -s bash "${RUNNER_TEMP}/step-$i.sh"
+          done
+          echo "shellcheck clean across $n run blocks"
 
   actionlint-pin:
     runs-on: ubuntu-slim

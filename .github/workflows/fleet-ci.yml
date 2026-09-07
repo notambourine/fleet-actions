@@ -42,6 +42,24 @@ on:
         description: Checkout depth. betterleaks git needs the full history.
         type: number
         default: 0
+      betterleaks-version:
+        description: >-
+          betterleaks release to run, "latest" or an exact version like 1.8.1. Keep latest
+          unless an upstream rule turns the fleet red; a frozen ruleset is what latest avoids.
+        type: string
+        default: latest
+      betterleaks-path:
+        description: Path to scan. Empty scans the workspace root.
+        type: string
+        default: ""
+      betterleaks-log-opts:
+        description: git log arguments narrowing a git scan, e.g. "--no-merges A..B". Beats pr-range.
+        type: string
+        default: ""
+      betterleaks-pr-range:
+        description: On pull_request, scan only the pull request's commits.
+        type: boolean
+        default: false
 
       dash-base-ref:
         description: Base branch for the ratchet, without the origin/ prefix. Empty resolves it from the event.
@@ -99,9 +117,13 @@ jobs:
       # after it, and chaining turns a fan-out into whack-a-mole.
       - name: betterleaks
         if: ${{ inputs.betterleaks && !cancelled() }}
-        run: |
-          echo "::error::betterleaks is not in fleet-ci yet. Keep this repo's own betterleaks job and pass betterleaks: false."
-          exit 1
+        uses: $/tools/betterleaks
+        with:
+          version: ${{ inputs.betterleaks-version }}
+          scan: ${{ inputs.scan-mode }}
+          path: ${{ inputs.betterleaks-path }}
+          log-opts: ${{ inputs.betterleaks-log-opts }}
+          pr-range: ${{ inputs.betterleaks-pr-range }}
 
       - id: cache-week
         if: ${{ inputs.zizmor && !cancelled() }}
@@ -189,14 +211,17 @@ jobs:
           echo "::error::tripwire is not in fleet-ci yet. Keep this repo's own shai-hulud-tripwire call and pass tripwire: false."
           exit 1
 
+      # The one tool that stays an external repo: it ships a Claude Code plugin that
+      # notambourine/claude consumes, so archiving it would freeze its patterns.
+      # SHA resolved from the release tag, not the branch head, or Dependabot tracks main.
       - name: wormhook
         if: ${{ inputs.wormhook && !cancelled() }}
-        run: |
-          echo "::error::wormhook is not in fleet-ci yet. Pass wormhook: false."
-          exit 1
+        uses: notambourine/wormhook@1270e6a1e7dc2fad0a0abe738a1c56c6e6496cff # v0.31.1
+        with:
+          # fast is Tier 0+1 over a source tree. deep walks node_modules content and only
+          # pays off after a dependency install, which fleet-ci does not run.
+          mode: fast
 
       - name: pnpm-pin
         if: ${{ inputs.pnpm-pin && !cancelled() }}
-        run: |
-          echo "::error::pnpm-pin is not in fleet-ci yet. Pass pnpm-pin: false."
-          exit 1
+        uses: $/tools/pnpm-pin
