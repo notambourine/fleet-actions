@@ -1,0 +1,24 @@
+name: tripwire
+description: >-
+  Fail-fast scan for Shai-Hulud / Mini Shai-Hulud npm-worm persistence IOCs:
+  malicious workflows, dead-drop files, exfil domains, dropper lifecycle hooks.
+branding:
+  icon: shield
+  color: red
+inputs:
+  allow-globs:
+    description: >-
+      Newline- or space-separated glob patterns whose file CONTENT may legitimately
+      contain IOC literals, such as a security README documenting them. The scanner
+      script is always allowed. Filename, hash, and lifecycle-script checks are never
+      exempted.
+    default: ""
+runs:
+  using: composite
+  steps:
+    # The scan reads the CALLER's git-tracked files in $GITHUB_WORKSPACE, so the
+    # calling job must have checked out its own code first.
+    - shell: bash
+      env:
+        TRIPWIRE_ALLOW: ${{ inputs.allow-globs }}
+      run: bash "${GITHUB_ACTION_PATH}/scripts/supply-chain-tripwire.sh"

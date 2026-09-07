@@ -20,13 +20,9 @@ permissions:
 jobs:
   fleet:
     uses: notambourine/fleet-actions/.github/workflows/fleet-ci.yml@<sha> # v1.0
-    with:
-      tripwire: false
 ```
 
-The example runs everything but `tripwire`, which is the last check still unabsorbed;
-enabling it currently fails. Every tool defaults on, so pass `false` for each check you
-need to skip.
+Every tool defaults on, so pass `false` for each check you need to skip.
 
 Every tool runs as a step of one job, so this reports one check, `<calling job> / fleet`
 (`fleet / fleet` above), no matter which subset a repo enables. That is the single name to
@@ -72,6 +68,7 @@ the audit finally agree.
 | `dash-exclude` | `""` | Glob pathspecs added to the built-in hold-out list, one per line. |
 | `dash-exclude-defaults` | `true` | Set `false` to gate the held-out paths like everything else. |
 | `dash-force-zero` | `false` | Assert the tree carries no dash instead of ratcheting. |
+| `tripwire-allow` | `""` | Globs whose content may carry IOC literals, such as a security README. Filename, hash, and lifecycle checks are never exempted. |
 | `actionlint-extra-labels` | `""` | Runner labels this repo uses beyond the fleet set, one per line. |
 | `actionlint-config-extra` | `""` | Raw actionlint config YAML merged over the fleet config and the caller's own file. |
 
@@ -98,11 +95,6 @@ These stopped being prose each repo restates:
 it. It is no longer the runner tier here: two tools already forbade it (betterleaks needs
 `envsubst` for cosign, `kjanat/actionlint` is a Docker action needing a daemon).
 
-## Status
-
-Everything runs except `tripwire`, which fails with a message naming the input to disable
-until it is absorbed.
-
 ## Tools
 
 | Directory | What it is |
@@ -110,6 +102,7 @@ until it is absorbed.
 | `tools/betterleaks` | Secret scan from a cosign-verified release, absorbed from `betterleaks-action`. Tested by named jobs in `self-test.yml`, not a `run.sh`. |
 | `tools/dashes` | The unicode-dash ratchet, absorbed from `dash-ratchet`. `test/run.sh` runs ~40 cases twice, under the ambient locale and under `LC_ALL=C`. |
 | `tools/pnpm-pin` | Asserts the root `package.json` pins an exact `packageManager`. |
+| `tools/tripwire` | Shai-Hulud persistence-IOC scan, absorbed from `shai-hulud-tripwire`. `test/run.sh` plants one IOC class per case in throwaway repos. |
 
 `wormhook` stays an external pinned action. It ships a Claude Code plugin that
 `notambourine/claude` consumes, so absorbing it would freeze its pattern updates.

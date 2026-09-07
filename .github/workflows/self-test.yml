@@ -14,7 +14,6 @@ jobs:
   fleet-ci:
     uses: ./.github/workflows/fleet-ci.yml
     with:
-      tripwire: false
       # Dogfood the dash gate at its strictest setting. Nothing else proves the
       # built-in hold-out list is a convenience rather than a blind spot.
       dash-exclude-defaults: false

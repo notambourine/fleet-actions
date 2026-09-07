@@ -78,6 +78,13 @@ on:
         type: boolean
         default: false
 
+      tripwire-allow:
+        description: >-
+          Globs whose CONTENT may carry IOC literals, such as a security README. Filename,
+          hash, and lifecycle checks are never exempted.
+        type: string
+        default: ""
+
       actionlint-extra-labels:
         description: Newline-separated runner labels this repo uses beyond the fleet set.
         type: string
@@ -207,9 +214,9 @@ jobs:
 
       - name: tripwire
         if: ${{ inputs.tripwire && !cancelled() }}
-        run: |
-          echo "::error::tripwire is not in fleet-ci yet. Keep this repo's own shai-hulud-tripwire call and pass tripwire: false."
-          exit 1
+        uses: $/tools/tripwire
+        with:
+          allow-globs: ${{ inputs.tripwire-allow }}
 
       # The one tool that stays an external repo: it ships a Claude Code plugin that
       # notambourine/claude consumes, so archiving it would freeze its patterns.
