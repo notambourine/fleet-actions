@@ -39,7 +39,8 @@ Validation stays off, so no candidate secret is ever sent to a vendor API, and
 
 ## Tests
 
-There is no `test/run.sh` here, and that is deliberate. Both real cases assert behavior
+There is no `test/run.sh` here, and `test/ACTION-LEVEL` records why so `self-test.yml`'s
+discovery skips this directory instead of failing on it. Both real cases assert behavior
 that exists only through `uses:` (`betterleaks-self-scan` dogfoods the action against
 this repo; `betterleaks-pinned-version` asserts a step *output*), so they live as named
 jobs in `self-test.yml` alongside a job that extracts every `run:` block with `yq` and

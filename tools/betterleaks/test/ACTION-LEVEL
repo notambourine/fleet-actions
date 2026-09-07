@@ -1,0 +1,13 @@
+This tool's suite cannot be a test/run.sh, so self-test.yml's discovery skips it.
+
+Covered instead by these named jobs in .github/workflows/self-test.yml:
+
+  betterleaks-self-scan       dogfoods the action against this repo (uses:)
+  betterleaks-pinned-version  asserts the step OUTPUT version == v1.8.0 (uses:)
+  betterleaks-shellcheck      yq-extracts every run: block and ShellChecks it
+
+The first two assert behavior that exists only through `uses:`, and a step output
+has no meaning outside it. A discovered shell script cannot express either.
+
+Deleting this file makes the tools matrix demand a test/run.sh again, which is the
+intended behavior for every tool that does not have this exemption in writing.

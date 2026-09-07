@@ -129,7 +129,10 @@ jobs:
           TOOLS=$(printf '%s\n' "$CHANGED" |
             sed -n 's|^tools/\([^/]*\)/.*|\1|p' | sort -u |
             while IFS= read -r tool; do
-              if [ -d "tools/$tool" ]; then
+              # A tool whose suite cannot be a shell script opts out in writing, and the
+              # file has to say which named jobs cover it. Anything else with no run.sh
+              # still fails the matrix below, which is the point.
+              if [ -d "tools/$tool" ] && [ ! -f "tools/$tool/test/ACTION-LEVEL" ]; then
                 printf '%s\n' "$tool"
               fi
             done |
