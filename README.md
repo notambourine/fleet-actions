@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   fleet:
-    uses: notambourine/fleet-actions/.github/workflows/fleet-ci.yml@<sha> # v1
+    uses: notambourine/fleet-actions/.github/workflows/fleet-ci.yml@<sha> # v1.0
     with:
       betterleaks: false
       tripwire: false
@@ -37,14 +37,22 @@ require in branch protection. A skipped step still reports; a skipped job never 
 
 ## Resolve the pin
 
-`v1` floats to the newest `v1.N` release. Resolve it to a commit and label it with the tag
-you resolved from, which is what Dependabot and the fleet's pin light read.
+`v1` floats to the newest `v1.N` release. Resolve through it, but label with the immutable
+tag it landed on.
 
 ```bash
 sha=$(gh api repos/notambourine/fleet-actions/commits/v1 -q .sha)
+tag=$(gh api repos/notambourine/fleet-actions/releases/latest -q .tag_name)
 ```
 
-Write `@$sha # v1`. Never write `@v1`.
+Write `@$sha # $tag`, so `@<sha> # v1.4`. Never write `@v1`, and never label a pin `# v1`.
+
+The label has to be the immutable tag because zizmor's `ref-version-mismatch` audit
+resolves the comment to a ref and compares it to the pinned commit. `# v1` is true only
+for the instant the pin is current: the next release moves `v1`, and every consumer still
+on the old commit starts failing the fleet's own zizmor gate at medium. `# v1.4` stays
+true forever, and it is also what Dependabot rewrites the comment to, so the proposer and
+the audit finally agree.
 
 ## Inputs
 

@@ -14,6 +14,9 @@ their next pin bump, so treat every change here as a change to every repo.
   way `tools/tripwire` does, in split literals the tripwire scanner cannot match.
 - Keep one directory per tool: `tools/<name>/{action.yml, scripts/, test/run.sh}`.
   `self-test.yml` discovers `tools/<name>/test/run.sh`; absorbing a tool edits no workflow.
+- Label every consumer pin with the immutable `v1.N` tag, never `# v1`. zizmor's
+  `ref-version-mismatch` resolves the comment and compares it to the pinned commit, so a
+  floating label fails every consumer the moment `v1` moves past them.
 - Keep `refs/tags/v1` exempt from tag immutability. The floating tag is promoted by
   `PATCH .../git/refs/tags/v1`, which an immutable-tags ruleset breaks permanently.
 - Pin `wormhook: false` in wormhook's own CI. wormhook calls `fleet-ci.yml`, which calls
