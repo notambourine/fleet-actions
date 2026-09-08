@@ -119,6 +119,11 @@ echo guarddog==<version> |
 Keep `--python-version` and the action's `python-version` input in step. The install
 step asserts the binary reports the version the file pins.
 
+The file's length is the hashes, not `--universal`. `--generate-hashes` emits every wheel
+hash a release published, whatever the platform, so resolving for linux alone drops one
+line of 768. Keep `--universal` so a consumer on a macOS or Windows runner still installs,
+even though every runner in this repo is `ubuntu-latest`.
+
 ## Reporting
 
 Risks labelled `suspicious` or `high_risk` fail the job. Set `minimum-risk` to `low`
