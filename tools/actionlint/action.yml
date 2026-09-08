@@ -1,0 +1,68 @@
+name: actionlint
+description: >-
+  Static-check GitHub Actions workflow files with actionlint, ShellCheck, and pyflakes
+  from a digest-pinned image.
+inputs:
+  files:
+    description: Newline-separated workflow file paths. Empty checks every workflow in the repository.
+    required: false
+    default: ""
+  format:
+    description: Output format. github, default, oneline, json, json-lines, markdown, or sarif.
+    required: false
+    default: github
+  ignore:
+    description: Newline-separated regular expressions for actionlint errors to ignore.
+    required: false
+    default: ""
+  config-file:
+    description: Path to an actionlint configuration file, relative to working-directory.
+    required: false
+    default: ""
+  shellcheck:
+    description: Run ShellCheck for shell scripts in workflow steps.
+    required: false
+    default: "true"
+  pyflakes:
+    description: Run pyflakes for Python scripts in workflow steps.
+    required: false
+    default: "true"
+  working-directory:
+    description: Directory to lint, relative to the repository workspace.
+    required: false
+    default: .
+  output-file:
+    description: Optional repository-relative file to receive the selected output format.
+    required: false
+    default: ""
+  fail-on-error:
+    description: Fail the step when actionlint finds problems. Invalid options and fatal errors always fail.
+    required: false
+    default: "true"
+outputs:
+  exit-code:
+    description: "actionlint exit code: 0 clean, 1 problems, 2 invalid options, 3 failure."
+  result:
+    description: "success, problems-found, invalid-options, or failure."
+  problems-found:
+    description: Whether actionlint found one or more problems.
+  problem-count:
+    description: Number of problems found, or empty if actionlint could not complete.
+  output:
+    description: Complete actionlint output in the selected format.
+  output-file:
+    description: Repository-relative output file path, or empty when output-file was not set.
+runs:
+  using: docker
+  image: Dockerfile
+  # Positional order is the image entrypoint's contract. self-test's planted case fails a bump that reorders it.
+  args:
+    - ${{ inputs.files }}
+    - ${{ inputs.format }}
+    - ${{ inputs.ignore }}
+    - ${{ inputs.config-file }}
+    - ${{ inputs.shellcheck }}
+    - ${{ inputs.pyflakes }}
+    - ${{ inputs.working-directory }}
+    - ${{ inputs.output-file }}
+    - ${{ inputs.fail-on-error }}
