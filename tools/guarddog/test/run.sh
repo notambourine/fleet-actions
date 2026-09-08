@@ -14,15 +14,22 @@ trap 'rm -rf "$TMP"' EXIT
 fails=0
 cases=0
 
-# stub <issues> writes a guarddog reporting that many issues, exiting as upstream does.
+# stub <issues> [score] [label] writes a guarddog result, exiting as upstream does.
 stub() {
-	local dir="$TMP/stub-$1"
+	local issues="$1" score="${2:-}" label="${3:-}" dir
+	if [ -z "$score" ]; then
+		if [ "$issues" -gt 0 ]; then score=8; else score=0; fi
+	fi
+	if [ -z "$label" ]; then
+		if [ "$score" = 0 ]; then label=no_risks_detected; else label=high_risk; fi
+	fi
+	dir="$TMP/stub-${issues}-${score}"
 	mkdir -p "$dir"
 	cat >"$dir/guarddog" <<EOF
 #!/bin/bash
 [ "\$*" = --version ] && { echo 3.2.0; exit 0; }
-printf '{"issues": $1, "risks": ["planted"]}\n'
-[ $1 -gt 0 ] && exit 1
+printf '{"issues": $issues, "risk_score": {"score": $score, "label": "$label"}, "risks": ["planted"]}\n'
+[ $issues -gt 0 ] && exit 1
 exit 0
 EOF
 	chmod +x "$dir/guarddog"
@@ -174,12 +181,20 @@ run_case "sandbox false passes --no-sandbox" "$npm" 0 "--no-sandbox" GD_SANDBOX=
 # The two paths that matter, plus the trap that upstream's exit code alone would hide.
 clean=$(stub 0)
 finding=$(stub 3)
-run_case "clean scan passes" "$npm" 0 "1 target(s) clean" \
+low=$(stub 3 4.3 low)
+run_case "clean scan passes" "$npm" 0 "below the suspicious risk threshold" \
 	GD_PLAN_ONLY=false GD_ACTIONS=false GD_BIN="$clean/guarddog" PATH="$clean:$PATH"
 run_case "a planted finding fails the job" "$npm" 1 "guarddog flagged 1 of 1 target(s)" \
 	GD_PLAN_ONLY=false GD_ACTIONS=false GD_BIN="$finding/guarddog" PATH="$finding:$PATH"
 run_case "the finding count reaches the log" "$npm" 1 "issues: 3" \
 	GD_PLAN_ONLY=false GD_ACTIONS=false GD_BIN="$finding/guarddog" PATH="$finding:$PATH"
+run_case "low risk passes the default threshold" "$npm" 0 "risk: low (4.3)" \
+	GD_PLAN_ONLY=false GD_ACTIONS=false GD_BIN="$low/guarddog" PATH="$low:$PATH"
+run_case "the low threshold rejects low risk" "$npm" 1 "guarddog flagged" \
+	GD_PLAN_ONLY=false GD_ACTIONS=false GD_MINIMUM_RISK=low \
+	GD_BIN="$low/guarddog" PATH="$low:$PATH"
+run_case "an unknown risk threshold fails" "$npm" 1 "unknown minimum risk" \
+	GD_MINIMUM_RISK=medium
 run_case "a missing binary is an error, not a pass" "$npm" 1 "not on PATH" \
 	GD_PLAN_ONLY=false GD_BIN="$TMP/nope/guarddog"
 
@@ -190,7 +205,7 @@ mkdir -p "$silent"
 cat >"$silent/guarddog" <<'EOF'
 #!/bin/bash
 [ "$*" = --version ] && { echo 3.2.0; exit 0; }
-printf '{"issues": 7, "risks": ["planted"]}\n'
+printf '{"issues": 7, "risk_score": {"score": 8, "label": "high_risk"}, "risks": ["planted"]}\n'
 exit 0
 EOF
 chmod +x "$silent/guarddog"

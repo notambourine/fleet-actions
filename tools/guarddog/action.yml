@@ -54,6 +54,9 @@ inputs:
       Keep guarddog's kernel sandbox (Landlock) around archive extraction and YARA.
       Setting false runs untrusted package code unsandboxed.
     default: "true"
+  minimum-risk:
+    description: Lowest risk label that fails the action, low, suspicious, or high.
+    default: suspicious
   python-version:
     description: Interpreter uv provisions. Must match the version requirements.txt was compiled for.
     default: "3.12"
@@ -126,4 +129,5 @@ runs:
         GD_EXCLUDE_RULES: ${{ inputs.exclude-rules }}
         GD_INCLUDE_DEV: ${{ inputs.include-dev-dependencies }}
         GD_SANDBOX: ${{ inputs.sandbox }}
+        GD_MINIMUM_RISK: ${{ inputs.minimum-risk }}
       run: bash "${GITHUB_ACTION_PATH}/scripts/run-guarddog.sh"

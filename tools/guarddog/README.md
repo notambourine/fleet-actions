@@ -121,15 +121,14 @@ step asserts the binary reports the version the file pins.
 
 ## Reporting
 
-Findings fail the job. Upstream's sample workflow emits SARIF into GitHub code scanning
-instead, which needs `security-events: write` from every caller and moves findings off
-the fleet check.
+Risks labelled `suspicious` or `high_risk` fail the job. Set `minimum-risk` to `low`
+or `high` to change the threshold. Upstream's sample workflow emits SARIF into GitHub
+code scanning instead, which needs `security-events: write` from every caller and moves
+findings off the fleet check.
 
-`--output-format json` is load-bearing rather than cosmetic: upstream honors
-`--exit-non-zero-on-finding` only inside the JSON reporter. Without it, a package
-scoring 8.6/10 High exits 0. The gate therefore always asks for JSON, and fails on a
-non-zero `issues` count as well as on the exit code, so neither alone can hide a
-finding.
+`--output-format json` is load-bearing rather than cosmetic. It carries GuardDog's risk
+score, which separates common low-risk capabilities from suspicious combinations. The
+wrapper also fails malformed reports and scan errors.
 
 guarddog also exits non-zero on a scan error, so a flagged target and a broken scan
 look alike from outside. Read the group in the log.

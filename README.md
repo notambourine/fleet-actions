@@ -55,6 +55,7 @@ jobs:
         docs/security.md
       guarddog-registry-verify: true # Download and score declared dependencies.
       guarddog-ecosystems: npm # Otherwise inferred from manifests.
+      guarddog-minimum-risk: high # Default: suspicious.
       actionlint-extra-labels: | # Add repository-specific runner labels.
         large-runner
 ```

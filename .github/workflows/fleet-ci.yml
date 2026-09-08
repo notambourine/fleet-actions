@@ -138,6 +138,10 @@ on:
           untrusted package code unsandboxed.
         type: boolean
         default: true
+      guarddog-minimum-risk:
+        description: Lowest GuardDog risk label that fails the job, low, suspicious, or high.
+        type: string
+        default: suspicious
 
       actionlint-extra-labels:
         description: Newline-separated runner labels this repo uses beyond the fleet set.
@@ -261,6 +265,7 @@ jobs:
           exclude-rules: ${{ inputs.guarddog-exclude-rules }}
           include-dev-dependencies: ${{ inputs.guarddog-include-dev-dependencies }}
           sandbox: ${{ inputs.guarddog-sandbox }}
+          minimum-risk: ${{ inputs.guarddog-minimum-risk }}
 
       - name: pnpm-pin
         if: ${{ inputs.pnpm-pin && !cancelled() }}

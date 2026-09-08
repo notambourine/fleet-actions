@@ -20,6 +20,7 @@ GD_EXCLUDE_PATHS="${GD_EXCLUDE_PATHS:-}"
 GD_EXCLUDE_RULES="${GD_EXCLUDE_RULES:-}"
 GD_INCLUDE_DEV="${GD_INCLUDE_DEV:-false}"
 GD_SANDBOX="${GD_SANDBOX:-true}"
+GD_MINIMUM_RISK="${GD_MINIMUM_RISK:-suspicious}"
 GD_STAGE="${GD_STAGE:-${RUNNER_TEMP:-}}"
 GD_PLAN_ONLY="${GD_PLAN_ONLY:-false}"
 
@@ -98,6 +99,13 @@ exclude_args() {
 }
 
 cd "$GD_ROOT" || fail "root '$GD_ROOT' is not a directory"
+
+case "$GD_MINIMUM_RISK" in
+low) minimum_score=0.1 ;;
+suspicious) minimum_score=5 ;;
+high) minimum_score=7 ;;
+*) fail "unknown minimum risk '$GD_MINIMUM_RISK' (one of: low suspicious high)" ;;
+esac
 
 selected=()
 if [ "$GD_ECOSYSTEMS" = auto ]; then
@@ -199,9 +207,9 @@ while IFS=$'\t' read -r ecosystem command target; do
 	[ -n "$ecosystem" ] || continue
 
 	# The staging path is opaque, so the log and the error name what was asked for.
-	label="$target"
+	target_label="$target"
 	if [ "$command" = scan ] && [ "$target" = . ]; then
-		label="tracked tree"
+		target_label="tracked tree"
 		[ "$GD_PLAN_ONLY" = true ] || stage_tree
 		target="${stage:-.}"
 	fi
@@ -223,13 +231,18 @@ while IFS=$'\t' read -r ecosystem command target; do
 		continue
 	fi
 
-	printf '::group::guarddog %s %s %s\n' "$ecosystem" "$command" "$label"
+	printf '::group::guarddog %s %s %s\n' "$ecosystem" "$command" "$target_label"
 	report=$("$GD_BIN" "${args[@]}")
 	rc=$?
-	issues=$(printf '%s' "$report" |
-		jq -r '[.. | objects | select(has("issues")) | .issues] | add // 0' 2>/dev/null)
-	# Findings live in the JSON, so summarize rather than dumping the whole report.
-	printf 'issues: %s\n' "${issues:-unparsed}"
+	summary=$(printf '%s' "$report" | jq -r '
+		([.. | objects | .issues? // empty] | add // 0) as $issues |
+		([.. | objects | .errors? | select(type == "object") | length] | add // 0) as $errors |
+		([.. | objects | .risk_score? | select(type == "object")] |
+			max_by(.score) // {score: 0, label: "no_risks_detected"}) as $risk |
+		"\($issues)\t\($errors)\t\($risk.score)\t\($risk.label)"' 2>/dev/null)
+	IFS=$'\t' read -r issues errors score risk_label <<<"$summary"
+	printf 'issues: %s; risk: %s (%s)\n' \
+		"${issues:-unparsed}" "${risk_label:-unparsed}" "${score:-unparsed}"
 	risks=$(printf '%s' "$report" | jq -r '[.. | objects | select(has("risks")) | .risks[]?]
 		| unique | .[]
 		| "  \(.severity // "?")\t\(.threat_rule // .name // "?")\t\(.threat_location // .file_path // "?")\t\(.threat_description // "")"' 2>/dev/null)
@@ -237,8 +250,10 @@ while IFS=$'\t' read -r ecosystem command target; do
 		printf '%s\n' "$risks" | column -t -s $'\t' 2>/dev/null || printf '%s\n' "$risks"
 	fi
 	echo '::endgroup::'
-	if [ "$rc" -ne 0 ] || { [ -n "$issues" ] && [ "$issues" != 0 ]; }; then
-		failed+=("$ecosystem $command $label")
+	if [ -z "$summary" ] || [ "${errors:-0}" -gt 0 ] || [ "$rc" -gt 1 ] ||
+		jq -en --argjson score "${score:-0}" --argjson minimum "$minimum_score" \
+			'$score >= $minimum' >/dev/null; then
+		failed+=("$ecosystem $command $target_label")
 	fi
 done <<<"$plan"
 
@@ -248,4 +263,4 @@ if [ "${#failed[@]}" -gt 0 ]; then
 	exit 1
 fi
 
-echo "guarddog: ${scanned} target(s) clean"
+echo "guarddog: ${scanned} target(s) below the ${GD_MINIMUM_RISK} risk threshold"
