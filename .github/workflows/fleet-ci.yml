@@ -32,9 +32,12 @@ on:
         type: boolean
         default: true
       guarddog:
-        description: GuardDog malware heuristics over the tracked tree and referenced actions.
+        description: >-
+          GuardDog malware heuristics over the tracked tree and referenced actions. Opt-in:
+          the actions gate fetches action source, and the rule set only moves when a pin
+          bump lands.
         type: boolean
-        default: true
+        default: false
 
       scan-mode:
         description: betterleaks subcommand, git or dir. git fingerprints commits.
@@ -126,6 +129,12 @@ on:
         description: >-
           Rules to drop, one per line. Bare names apply to every ecosystem scanned; scope one
           with pypi:<rule>.
+        type: string
+        default: ""
+      guarddog-exclude-packages:
+        description: >-
+          Packages whose verify findings are dropped before scoring, one per line: <name>,
+          <name>@<version>, or <ecosystem|github_action>:<name>. `*` globs.
         type: string
         default: ""
       guarddog-include-dev-dependencies:
@@ -263,6 +272,7 @@ jobs:
           ecosystems: ${{ inputs.guarddog-ecosystems }}
           exclude-paths: ${{ inputs.guarddog-exclude-paths }}
           exclude-rules: ${{ inputs.guarddog-exclude-rules }}
+          exclude-packages: ${{ inputs.guarddog-exclude-packages }}
           include-dev-dependencies: ${{ inputs.guarddog-include-dev-dependencies }}
           sandbox: ${{ inputs.guarddog-sandbox }}
           minimum-risk: ${{ inputs.guarddog-minimum-risk }}

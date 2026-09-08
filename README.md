@@ -20,8 +20,9 @@ permissions:
 jobs:
   fleet-actions:
     uses: notambourine/fleet-actions/.github/workflows/fleet-ci.yml@<sha> # v1.0.1
-    # Every check defaults to true. Set its name to false to disable it.
+    # Every check but guarddog defaults to true. Set its name to false to disable it.
     # with:
+    #   guarddog: true # Off by default. The one check a caller opts into.
     #   scan-mode: git # betterleaks scans the full history.
     #   wormhook-mode: deep # Includes tracked node_modules when present.
     #   betterleaks-pr-range: false # Scan history, not only PR commits.
@@ -37,11 +38,13 @@ jobs:
     #     dist/*
     #   guarddog-exclude-rules: | # Empty; scope rules with ecosystem:rule.
     #     pypi:repository_integrity_mismatch
+    #   guarddog-exclude-packages: | # Empty; drops one package, not a rule.
+    #     left-pad@1.3.0
     #   actionlint-extra-labels: | # Empty; add custom runner labels here.
     #     large-runner
 ```
 
-All checks are enabled by default. The workflow reports one check named
+Every check except `guarddog` is enabled by default. The workflow reports one check named
 `<workflow name> / <calling job>`, so these two names are load-bearing: the
 example above reports `notambourine / fleet-actions`. This workflow's own job id
 never appears in the check name.

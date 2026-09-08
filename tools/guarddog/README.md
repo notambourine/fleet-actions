@@ -6,7 +6,11 @@ model needs both a capability (spawn a process, reach the network) and a threat
 indicator (obfuscated payload, exfil domain) before it scores anything, which is what
 keeps it quieter than a pattern-matcher.
 
-Callers reach this through `fleet-ci.yml`'s `guarddog*` inputs.
+Callers reach this through `fleet-ci.yml`'s `guarddog*` inputs, and `guarddog: false` is
+the default there: the `actions` gate fetches action source over the network, and a
+hash-pinned ruleset only advances when a bump lands, so a caller opts in rather than
+inherits it. This repo's own `self-test` sets `guarddog: true`, which is what covers the
+gate.
 
 ## Two gates, and the one that is off
 
@@ -98,6 +102,32 @@ they turn the check red without a code change: `typosquatting`,
 `repository_integrity_mismatch`, which DataDog excludes in their own CI. They only
 apply to `registry-verify` anyway; a local scan has no registry metadata to read.
 
+## Allowlisting a package
+
+`exclude-rules` is the wrong tool for one noisy dependency: it drops the rule for every
+package in the scan. `exclude-packages` drops the package instead, and only the package,
+by removing its entry from the report before the report is scored:
+
+```yaml
+with:
+  exclude-packages: |
+    left-pad@1.3.0
+    @acme/*
+    github_action:acme/deploy-action
+```
+
+A bare name covers every version and every ecosystem. `<name>@<version>` holds to that
+version, so the next release comes back red. `<ecosystem>:<name>` scopes an entry, and
+`github_action` is a scope here even though it is not an ecosystem elsewhere. `*` globs,
+and an npm scope's leading `@` is not read as a version.
+
+This reaches the `verify` commands only: the `actions` gate and `registry-verify`.
+A local scan reports file paths rather than packages, so `exclude-paths` is its knob.
+
+Every suppression prints in the target's log group. Nothing warns about an entry that
+matched nothing, because a per-target warning would fire on every target the package
+does not appear in.
+
 ## Install
 
 `requirements.txt` is a hash-pinned resolution of `guarddog` and its 33 transitive
@@ -176,12 +206,13 @@ GD_ROOT=/path/to/repo bash tools/guarddog/scripts/run-guarddog.sh
 
 Environment variables mirror the inputs: `GD_ECOSYSTEMS`, `GD_LOCAL_SCAN`, `GD_ACTIONS`,
 `GD_REGISTRY_VERIFY`, `GD_SCAN_PATHS`, `GD_EXCLUDE_PATHS`, `GD_EXCLUDE_RULES`,
-`GD_INCLUDE_DEV`, `GD_SANDBOX`, `GD_BIN`, `GD_STAGE`. `GD_PLAN_ONLY=true` prints the
+`GD_EXCLUDE_PACKAGES`, `GD_INCLUDE_DEV`, `GD_SANDBOX`, `GD_BIN`, `GD_STAGE`. `GD_PLAN_ONLY=true` prints the
 commands it would run and touches nothing.
 
 ## Tests
 
-`test/run.sh` asserts detection, gate toggles, path exclusion, and argument assembly in
+`test/run.sh` asserts detection, gate toggles, path and package exclusion, and argument
+assembly in
 plan mode, so no case reaches a registry. Three cases carry the weight: a stub reporting
 zero issues must pass, a stub reporting issues must fail the job, and a stub reporting
 issues while exiting 0 must still fail, which is the upstream behavior the JSON flag
