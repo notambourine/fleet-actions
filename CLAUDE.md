@@ -2,6 +2,7 @@
 
 Treat every workflow change as a fleet-wide CI change.
 
+- Answer every question about `fleet-ci.yml` and its inputs, not this repo's self-test.
 - Land changes through squash pull requests.
 - Tag every release as `v1.N.P`. Bump `N` for input changes and `P` for everything else.
   The release workflow rejects a two-part `v1.N` tag.
