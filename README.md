@@ -7,7 +7,7 @@ pin validation.
 ## Usage
 
 ```yaml
-name: ci
+name: notambourine
 
 on:
   pull_request:
@@ -18,12 +18,33 @@ permissions:
   contents: read
 
 jobs:
-  fleet:
+  fleet-actions:
     uses: notambourine/fleet-actions/.github/workflows/fleet-ci.yml@<sha> # v1.0.1
+    # Every check defaults to true. Set its name to false to disable it.
+    # with:
+    #   scan-mode: git # betterleaks scans the full history.
+    #   wormhook-mode: deep # Includes tracked node_modules when present.
+    #   betterleaks-pr-range: false # Scan history, not only PR commits.
+    #   dash-force-zero: false # Reject new dashes without policing old ones.
+    #   dash-exclude: | # Built-in exclusions only; add pathspecs here.
+    #     docs/vendor/**
+    #   tripwire-allow: | # Empty by default; add content exceptions here.
+    #     docs/security.md
+    #   guarddog-registry-verify: false # Do not download declared dependencies.
+    #   guarddog-ecosystems: auto # Infer ecosystems from tracked manifests.
+    #   guarddog-minimum-risk: suspicious # Low-risk findings remain visible.
+    #   guarddog-exclude-paths: | # Empty; add tracked globs here.
+    #     dist/*
+    #   guarddog-exclude-rules: | # Empty; scope rules with ecosystem:rule.
+    #     pypi:repository_integrity_mismatch
+    #   actionlint-extra-labels: | # Empty; add custom runner labels here.
+    #     large-runner
 ```
 
 All checks are enabled by default. The workflow reports one check named
-`<calling job> / fleet`.
+`<workflow name> / <calling job>`, so these two names are load-bearing: the
+example above reports `notambourine / fleet-actions`. This workflow's own job id
+never appears in the check name.
 
 Pin the workflow to a commit and label it with the immutable release tag:
 
@@ -34,54 +55,51 @@ tag=$(gh api repos/notambourine/fleet-actions/releases/latest -q .tag_name)
 
 Use `@$sha # $tag`. Do not use `@v1` or label a commit pin `# v1`.
 
-## Inputs
-
-| Input | Default | Effect |
-| --- | --- | --- |
-| `betterleaks` | `true` | Run betterleaks with a verified release. |
-| `zizmor` | `true` | Audit workflows at medium severity or higher. |
-| `actionlint` | `true` | Run actionlint with ShellCheck and pyflakes. |
-| `dashes` | `true` | Reject new Unicode dashes on pull requests. |
-| `tripwire` | `true` | Scan for Shai-Hulud persistence indicators. |
-| `wormhook` | `true` | Scan for npm supply-chain malware. |
-| `pnpm-pin` | `true` | Require `package.json#packageManager`. |
-| `scan-mode` | `git` | Set the betterleaks subcommand to `git` or `dir`. |
-| `wormhook-mode` | `deep` | Set the wormhook scan depth to `fast` or `deep`. |
-| `fetch-depth` | `0` | Set checkout depth. `scan-mode: git` requires `0`. |
-| `betterleaks-version` | `latest` | Select `latest` or an exact betterleaks release. |
-| `betterleaks-path` | `""` | Set the scan path. Empty uses the workspace root. |
-| `betterleaks-log-opts` | `""` | Pass arguments to `git log`. Overrides `betterleaks-pr-range`. |
-| `betterleaks-pr-range` | `false` | Scan only pull request commits. |
-| `dash-base-ref` | `""` | Set the base branch without `origin/`. Empty uses the event. |
-| `dash-exclude` | `""` | Add excluded glob pathspecs, one per line. |
-| `dash-exclude-defaults` | `true` | Apply the built-in exclusions. |
-| `dash-force-zero` | `false` | Require zero Unicode dashes in the tree. |
-| `tripwire-allow` | `""` | Allow IOC literals in matching file contents. |
-| `actionlint-extra-labels` | `""` | Add runner labels, one per line. |
-| `actionlint-config-extra` | `""` | Merge raw YAML over the actionlint configuration. |
-
-The workflow merges a caller's `.github/actionlint.yaml` or
-`.github/actionlint.yml`. The extra config input takes precedence.
+[The reusable workflow](.github/workflows/fleet-ci.yml) documents every input and
+default. It also merges `.github/actionlint.yaml` or `.github/actionlint.yml` from
+the caller; `actionlint-config-extra` takes precedence.
 
 ## Scanning installed dependencies
 
-`fleet-ci` never installs, so its wormhook step sees source only. `deep` forces the
-Tier-2 `node_modules` content walk and skips silently when the directory is absent,
-which makes it free here and a real gate on a repo that commits the tree.
-
-Reaching installed dependencies takes a second call in the build workflow, in the same
-job as the install:
+`fleet-ci` never installs dependencies. Scan `node_modules` in the build job after
+`npm ci`:
 
 ```yaml
-- run: npm ci
-- uses: notambourine/wormhook@<sha> # v0.31.1
-  with:
-    mode: deep
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@<sha> # vX.Y.Z
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # Keep this after setup-node and before npm ci so its npm shim wins.
+      - uses: SocketDev/action@2d3f25590c6ed6ba11a9a14c064d962a3a04698f # v1.3.1
+        with:
+          mode: firewall-free
+
+      - run: npm ci
+
+      - uses: notambourine/wormhook@<sha> # v0.31.1
+        with:
+          mode: deep
+
+      - uses: notambourine/fleet-actions/tools/guarddog@<sha> # v1.0.1
+        with:
+          scan-paths: npm:node_modules
+          local-scan: false
+          actions: false
+
+      - run: npm run test
 ```
 
-A repo that does this may pass `wormhook: false` to `fleet-ci` and rely on the
-post-install scan alone. Keep the default `true` if the install runs behind a path
-filter or in a job that can be skipped, since the fleet scan is what still reports.
+The two `false` values avoid repeating the fleet scan. Keep wormhook enabled in
+`fleet-ci` when this build job can be skipped.
 
 ## Local actions
 
@@ -89,6 +107,7 @@ filter or in a job that can be skipped, since the fleet scan is what still repor
 | --- | --- |
 | `tools/betterleaks` | Verified betterleaks installation and scan. |
 | `tools/dashes` | Unicode dash ratchet. |
+| `tools/guarddog` | Malware heuristics over the tracked tree and referenced actions. |
 | `tools/pnpm-pin` | Exact `packageManager` version. |
 | `tools/tripwire` | Supply-chain persistence indicators. |
 
