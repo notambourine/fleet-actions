@@ -56,6 +56,10 @@ jobs:
       guarddog-registry-verify: true # Download and score declared dependencies.
       guarddog-ecosystems: npm # Otherwise inferred from manifests.
       guarddog-minimum-risk: high # Default: suspicious.
+      guarddog-exclude-paths: | # Skip tracked paths; a workflow skips its actions too.
+        dist/*
+      guarddog-exclude-rules: | # Suppress a rule for every scan or one ecosystem.
+        pypi:repository_integrity_mismatch
       actionlint-extra-labels: | # Add repository-specific runner labels.
         large-runner
 ```
