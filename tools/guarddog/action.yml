@@ -46,6 +46,12 @@ inputs:
       Rules to drop, one per line. A bare name applies to every ecosystem scanned;
       guarddog validates names per ecosystem, so scope one with `pypi:<rule>`.
     default: ""
+  exclude-packages:
+    description: >-
+      Packages whose verify findings are dropped before scoring, one per line:
+      `<name>`, `<name>@<version>`, or `<ecosystem|github_action>:<name>`. `*` globs.
+      Verify only, since a local scan reports files rather than packages.
+    default: ""
   include-dev-dependencies:
     description: Add npm devDependencies to a registry verify, which reads `dependencies` only.
     default: "false"
@@ -139,6 +145,7 @@ runs:
         GD_SCAN_PATHS: ${{ inputs.scan-paths }}
         GD_EXCLUDE_PATHS: ${{ inputs.exclude-paths }}
         GD_EXCLUDE_RULES: ${{ inputs.exclude-rules }}
+        GD_EXCLUDE_PACKAGES: ${{ inputs.exclude-packages }}
         GD_INCLUDE_DEV: ${{ inputs.include-dev-dependencies }}
         GD_SANDBOX: ${{ inputs.sandbox }}
         GD_MINIMUM_RISK: ${{ inputs.minimum-risk }}

@@ -18,6 +18,7 @@ GD_REGISTRY_VERIFY="${GD_REGISTRY_VERIFY:-false}"
 GD_SCAN_PATHS="${GD_SCAN_PATHS:-}"
 GD_EXCLUDE_PATHS="${GD_EXCLUDE_PATHS:-}"
 GD_EXCLUDE_RULES="${GD_EXCLUDE_RULES:-}"
+GD_EXCLUDE_PACKAGES="${GD_EXCLUDE_PACKAGES:-}"
 GD_INCLUDE_DEV="${GD_INCLUDE_DEV:-false}"
 GD_SANDBOX="${GD_SANDBOX:-true}"
 GD_MINIMUM_RISK="${GD_MINIMUM_RISK:-suspicious}"
@@ -37,6 +38,12 @@ check_ecosystem() {
 	npm | pypi | go | crates | rubygems) ;;
 	*) fail "unknown ecosystem '$1' (one of: ${ALL_ECOSYSTEMS[*]})" ;;
 	esac
+}
+
+trim() {
+	local s="$1"
+	s="${s#"${s%%[![:space:]]*}"}"
+	printf '%s' "${s%"${s##*[![:space:]]}"}"
 }
 
 # The candidate set is the tracked tree, so a workspace package at any depth counts
@@ -70,8 +77,7 @@ workflows() {
 excluded() {
 	local path="$1" pattern
 	while IFS= read -r pattern; do
-		pattern="${pattern#"${pattern%%[![:space:]]*}"}"
-		pattern="${pattern%"${pattern##*[![:space:]]}"}"
+		pattern=$(trim "$pattern")
 		[ -n "$pattern" ] || continue
 		# shellcheck disable=SC2053 # $pattern is a pattern, not a literal
 		[[ "$path" == $pattern ]] && return 0
@@ -84,8 +90,7 @@ excluded() {
 exclude_args() {
 	local ecosystem="$1" rule scope
 	while IFS= read -r rule; do
-		rule="${rule#"${rule%%[![:space:]]*}"}"
-		rule="${rule%"${rule##*[![:space:]]}"}"
+		rule=$(trim "$rule")
 		[ -n "$rule" ] || continue
 		case "$rule" in
 		*:*)
@@ -97,6 +102,62 @@ exclude_args() {
 		printf '%s\n%s\n' -x "$rule"
 	done <<<"$GD_EXCLUDE_RULES"
 }
+
+# An allowlisted package leaves the report before it is scored, because guarddog's own
+# `-x` drops a rule everywhere. Verify only: a local scan reports files, not packages.
+check_scope() {
+	case "$1" in
+	npm | pypi | go | crates | rubygems | github_action) ;;
+	*) fail "unknown scope '$1' in exclude-packages (an ecosystem or github_action)" ;;
+	esac
+}
+
+# scope<TAB>name-glob<TAB>version-glob, empty fields matching anything.
+parse_allowlist() {
+	local entry scope version
+	while IFS= read -r entry; do
+		entry=$(trim "$entry")
+		[ -n "$entry" ] || continue
+		scope=""
+		case "$entry" in
+		*:*)
+			scope="${entry%%:*}"
+			check_scope "$scope"
+			entry="${entry#*:}"
+			;;
+		esac
+		version=""
+		# An npm scope starts with @, so only a later @ opens the version.
+		case "${entry#?}" in
+		*@*)
+			version="${entry##*@}"
+			entry="${entry%@*}"
+			;;
+		esac
+		[ -n "$entry" ] || fail "exclude-packages entry names no package"
+		printf '%s\t%s\t%s\n' "$scope" "$entry" "$version"
+	done
+}
+
+# Globs, not regexes: `@scope/*` reads the way the exclude-paths input does.
+# shellcheck disable=SC2016 # a jq program, not a shell string
+ALLOW_FILTER='
+	def globmatch($pat): test("^" + ($pat
+		| gsub("(?<c>[.+^$()|\\[\\]{}\\\\])"; "\\\(.c)")
+		| gsub("\\*"; ".*")) + "$");
+	def allowed($entry): any($allow[]; . as $a
+		| ($a.scope == "" or $a.scope == $ecosystem)
+		and (($entry.dependency // "") | globmatch($a.name))
+		and ($a.version == "" or (($entry.version // "") | globmatch($a.version))));
+	if type == "array" then
+		{kept: map(select(allowed(.) | not)),
+			dropped: [.[] | select(allowed(.)) | "\(.dependency)@\(.version // "*")"]}
+	else {kept: ., dropped: []} end'
+
+allow_json=$(parse_allowlist <<<"$GD_EXCLUDE_PACKAGES" |
+	jq -R -s 'split("\n") | map(select(length > 0) | split("\t")
+		| {scope: .[0], name: .[1], version: .[2]})') ||
+	fail "could not read exclude-packages"
 
 cd "$GD_ROOT" || fail "root '$GD_ROOT' is not a directory"
 
@@ -158,8 +219,7 @@ fi
 # Explicit paths are scanned in place, untracked included, which is how a post-install
 # step reaches node_modules. Unstaged, so exclude-paths cannot reach inside one.
 while IFS= read -r entry; do
-	entry="${entry#"${entry%%[![:space:]]*}"}"
-	entry="${entry%"${entry##*[![:space:]]}"}"
+	entry=$(trim "$entry")
 	[ -n "$entry" ] || continue
 	case "$entry" in
 	*:*)
@@ -234,6 +294,16 @@ while IFS=$'\t' read -r ecosystem command target; do
 	printf '::group::guarddog %s %s %s\n' "$ecosystem" "$command" "$target_label"
 	report=$("$GD_BIN" "${args[@]}")
 	rc=$?
+	if [ "$allow_json" != "[]" ] && [ "$command" = verify ]; then
+		if verdict=$(printf '%s' "$report" | jq -c --argjson allow "$allow_json" \
+			--arg ecosystem "$ecosystem" "$ALLOW_FILTER" 2>/dev/null); then
+			dropped=$(printf '%s' "$verdict" | jq -r '.dropped | join(", ")')
+			[ -z "$dropped" ] || printf 'allowlisted: %s\n' "$dropped"
+			report=$(printf '%s' "$verdict" | jq -c '.kept')
+			# Upstream's finding exit counts the dropped entries too. A scan error is rc>1.
+			[ -z "$dropped" ] || [ "$rc" -ne 1 ] || rc=0
+		fi
+	fi
 	summary=$(printf '%s' "$report" | jq -r '
 		([.. | objects | .issues? // empty] | add // 0) as $issues |
 		([.. | objects | .errors? | select(type == "object") | length] | add // 0) as $errors |

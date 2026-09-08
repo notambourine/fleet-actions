@@ -175,6 +175,73 @@ refute_case "scoped exclude-rule stays out of the others" "$poly" \
 	"npm scan --exit-non-zero-on-finding --output-format json -x repository_integrity_mismatch" \
 	GD_EXCLUDE_RULES="pypi:repository_integrity_mismatch"
 
+# The package allowlist upstream does not have. verify_stub <entry>... emits a
+# verify-shaped report, one array element per `name|version|score` triple.
+verify_stub() {
+	local dir="$TMP/verify-stub-$RANDOM" body="" entry name version score
+	mkdir -p "$dir"
+	for entry in "$@"; do
+		IFS='|' read -r name version score <<<"$entry"
+		body+="${body:+,}"
+		body+="{\"dependency\": \"$name\", \"version\": \"$version\", \"result\":"
+		body+=" {\"issues\": 1, \"errors\": {}, \"risk_score\":"
+		body+=" {\"score\": $score, \"label\": \"high_risk\"}, \"risks\": [\"planted\"]}}"
+	done
+	cat >"$dir/guarddog" <<EOF
+#!/bin/bash
+[ "\$*" = --version ] && { echo 3.2.0; exit 0; }
+printf '[$body]\n'
+exit 1
+EOF
+	chmod +x "$dir/guarddog"
+	printf '%s' "$dir"
+}
+
+one=$(verify_stub "left-pad|1.3.0|8")
+two=$(verify_stub "left-pad|1.3.0|8" "colors|1.4.0|9")
+scoped=$(verify_stub "@acme/tools|2.0.0|8")
+actions=$(verify_stub "actions/checkout|v4|8")
+
+verify_case() {
+	local name="$1" stub="$2" want_rc="$3" want_out="$4"
+	shift 4
+	run_case "$name" "$npm" "$want_rc" "$want_out" GD_PLAN_ONLY=false GD_ACTIONS=false \
+		GD_REGISTRY_VERIFY=true GD_LOCAL_SCAN=false GD_ECOSYSTEMS=npm \
+		GD_BIN="$stub/guarddog" PATH="$stub:$PATH" "$@"
+}
+
+verify_case "an unlisted package still fails" "$one" 1 "guarddog flagged"
+verify_case "an allowlisted package stops failing the job" "$one" 0 \
+	"below the suspicious risk threshold" GD_EXCLUDE_PACKAGES="left-pad"
+verify_case "the suppression reaches the log" "$one" 0 "allowlisted: left-pad@1.3.0" \
+	GD_EXCLUDE_PACKAGES="left-pad"
+verify_case "an allowlist entry does not cover the rest of the report" "$two" 1 \
+	"guarddog flagged" GD_EXCLUDE_PACKAGES="left-pad"
+verify_case "a version pin allowlists only that version" "$one" 1 "guarddog flagged" \
+	GD_EXCLUDE_PACKAGES="left-pad@1.2.0"
+verify_case "a matching version pin holds" "$one" 0 "below the suspicious" \
+	GD_EXCLUDE_PACKAGES="left-pad@1.3.0"
+verify_case "a glob covers an npm scope" "$scoped" 0 "below the suspicious" \
+	GD_EXCLUDE_PACKAGES="@acme/*"
+verify_case "an npm scope is not read as a version" "$scoped" 0 \
+	"allowlisted: @acme/tools@2.0.0" GD_EXCLUDE_PACKAGES="@acme/tools"
+verify_case "a scoped entry reaches its ecosystem" "$one" 0 "below the suspicious" \
+	GD_EXCLUDE_PACKAGES="npm:left-pad"
+verify_case "a scoped entry stays off the others" "$one" 1 "guarddog flagged" \
+	GD_EXCLUDE_PACKAGES="pypi:left-pad"
+verify_case "an unknown scope fails" "$one" 1 "unknown scope" \
+	GD_EXCLUDE_PACKAGES="cocoapods:left-pad"
+
+run_case "github_action is an allowlist scope" "$wf" 0 "allowlisted: actions/checkout@v4" \
+	GD_PLAN_ONLY=false GD_LOCAL_SCAN=false GD_BIN="$actions/guarddog" \
+	PATH="$actions:$PATH" GD_EXCLUDE_PACKAGES="github_action:actions/checkout"
+
+# A local scan reports a path, not a dependency, so the allowlist must not touch it.
+local_finding=$(stub 3)
+run_case "the allowlist leaves a local scan alone" "$npm" 1 "guarddog flagged" \
+	GD_PLAN_ONLY=false GD_ACTIONS=false GD_BIN="$local_finding/guarddog" \
+	PATH="$local_finding:$PATH" GD_EXCLUDE_PACKAGES="left-pad"
+
 run_case "sandbox stays on by default" "$npm" 0 "scan --exit-non-zero-on-finding --output-format json"
 run_case "sandbox false passes --no-sandbox" "$npm" 0 "--no-sandbox" GD_SANDBOX=false
 

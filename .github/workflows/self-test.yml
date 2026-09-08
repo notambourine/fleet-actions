@@ -15,6 +15,7 @@ jobs:
     uses: ./.github/workflows/fleet-ci.yml
     with:
       dash-exclude-defaults: false
+      guarddog: true # Opt-in for callers, so only the self-test covers the gate.
 
   betterleaks-self-scan:
     runs-on: ubuntu-latest
