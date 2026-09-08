@@ -1,0 +1,129 @@
+name: guarddog
+description: >-
+  Run DataDog GuardDog from a hash-pinned install: offline YARA over the tracked tree
+  and a scan of the actions the workflows reference. Findings fail the job.
+author: NoTambourine LLC
+branding:
+  icon: search
+  color: orange
+
+inputs:
+  local-scan:
+    description: >-
+      Run the ecosystem's YARA rules over the tracked tree. Offline: no registry, no
+      metadata lookups.
+    default: "true"
+  actions:
+    description: >-
+      Scan the JavaScript of the actions each workflow references. This is code that
+      runs with the workflow's token, and it is fetched from GitHub.
+    default: "true"
+  registry-verify:
+    description: >-
+      Also download and score every declared dependency. Off because Socket and the
+      update bots already cover that surface for the cost of a registry round trip
+      per package.
+    default: "false"
+  ecosystems:
+    description: >-
+      "auto" picks every ecosystem whose manifest the tree holds, or name a subset:
+      npm, pypi, go, crates, rubygems. The workflow scan has its own toggle.
+    default: auto
+  scan-paths:
+    description: >-
+      Paths to scan in place, one per line, untracked included: `node_modules` after an
+      install. `<ecosystem>:<path>` picks the rule set, a bare path runs every selected
+      ecosystem over it.
+    default: ""
+  exclude-paths:
+    description: >-
+      Paths kept out of the scan, one glob per line, matched against tracked
+      repo-relative paths. `*` crosses `/`, so `dist/*` drops the subtree. guarddog
+      itself has no ignore file, baseline, or path allowlist; this is that.
+    default: ""
+  exclude-rules:
+    description: >-
+      Rules to drop, one per line. A bare name applies to every ecosystem scanned;
+      guarddog validates names per ecosystem, so scope one with `pypi:<rule>`.
+    default: ""
+  include-dev-dependencies:
+    description: Add npm devDependencies to a registry verify, which reads `dependencies` only.
+    default: "false"
+  sandbox:
+    description: >-
+      Keep guarddog's kernel sandbox (Landlock) around archive extraction and YARA.
+      Setting false runs untrusted package code unsandboxed.
+    default: "true"
+  python-version:
+    description: Interpreter uv provisions. Must match the version requirements.txt was compiled for.
+    default: "3.12"
+
+outputs:
+  version:
+    description: The guarddog release that ran, e.g. 3.2.0.
+    value: ${{ steps.install.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - name: guarddog pin
+      id: pin
+      shell: bash
+      run: |
+        set -euo pipefail
+        req="${GITHUB_ACTION_PATH}/requirements.txt"
+        version=$(sed -n 's/^guarddog==\([^ ]*\).*/\1/p' "$req")
+        [ -n "$version" ] || { echo "::error::requirements.txt pins no guarddog version"; exit 1; }
+        # Cache key covers the whole hashed tree and the interpreter, the only two
+        # inputs to the install. setup-uv keys on the workspace, and this file is
+        # in the action path instead.
+        if command -v sha256sum >/dev/null 2>&1; then
+          digest=$(sha256sum "$req")
+        else
+          digest=$(shasum -a 256 "$req")
+        fi
+        printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+        printf 'suffix=guarddog-%s-py%s\n' "${digest:0:12}" "$PY_VERSION" >> "$GITHUB_OUTPUT"
+      env:
+        PY_VERSION: ${{ inputs.python-version }}
+
+    - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      with:
+        enable-cache: true
+        cache-suffix: ${{ steps.pin.outputs.suffix }}
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install guarddog
+      id: install
+      shell: bash
+      env:
+        GD_VERSION: ${{ steps.pin.outputs.version }}
+      run: |
+        set -euo pipefail
+        # Keep the venv out of the scanned workspace.
+        venv="${RUNNER_TEMP}/guarddog-venv"
+        uv venv "$venv"
+        # --require-hashes refuses any distribution the file does not pin, transitively.
+        uv pip install --python "$venv/bin/python" --require-hashes \
+          -r "${GITHUB_ACTION_PATH}/requirements.txt"
+        resolved=$("$venv/bin/guarddog" --version)
+        [ "$resolved" = "$GD_VERSION" ] || {
+          echo "::error::installed guarddog $resolved, requirements.txt pins $GD_VERSION"; exit 1; }
+        printf 'version=%s\n' "$resolved" >> "$GITHUB_OUTPUT"
+        printf 'bin=%s\n' "$venv/bin/guarddog" >> "$GITHUB_OUTPUT"
+        echo "guarddog $resolved installed from the pinned tree"
+
+    - name: guarddog verify
+      shell: bash
+      env:
+        GD_BIN: ${{ steps.install.outputs.bin }}
+        GD_ECOSYSTEMS: ${{ inputs.ecosystems }}
+        GD_LOCAL_SCAN: ${{ inputs.local-scan }}
+        GD_ACTIONS: ${{ inputs.actions }}
+        GD_REGISTRY_VERIFY: ${{ inputs.registry-verify }}
+        GD_SCAN_PATHS: ${{ inputs.scan-paths }}
+        GD_EXCLUDE_PATHS: ${{ inputs.exclude-paths }}
+        GD_EXCLUDE_RULES: ${{ inputs.exclude-rules }}
+        GD_INCLUDE_DEV: ${{ inputs.include-dev-dependencies }}
+        GD_SANDBOX: ${{ inputs.sandbox }}
+      run: bash "${GITHUB_ACTION_PATH}/scripts/run-guarddog.sh"

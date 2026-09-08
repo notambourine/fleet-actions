@@ -31,6 +31,10 @@ on:
         description: Assert package.json declares packageManager.
         type: boolean
         default: true
+      guarddog:
+        description: GuardDog malware heuristics over the tracked tree and referenced actions.
+        type: boolean
+        default: true
 
       scan-mode:
         description: betterleaks subcommand, git or dir. git fingerprints commits.
@@ -89,6 +93,51 @@ on:
           hash, and lifecycle checks are never exempted.
         type: string
         default: ""
+
+      guarddog-local-scan:
+        description: Run the YARA rules over the tracked tree. Offline, no registry traffic.
+        type: boolean
+        default: true
+      guarddog-actions:
+        description: >-
+          Scan the JavaScript of the actions each workflow references. That code runs with
+          the workflow's token and nothing else in the fleet reads it.
+        type: boolean
+        default: true
+      guarddog-registry-verify:
+        description: >-
+          Also download and score every declared dependency. Off because Socket and the update
+          bots cover that surface, at a registry round trip per package.
+        type: boolean
+        default: false
+      guarddog-ecosystems:
+        description: >-
+          auto picks every ecosystem whose manifest the tree holds and skips the rest. Or name
+          a subset: npm, pypi, go, crates, rubygems.
+        type: string
+        default: auto
+      guarddog-exclude-paths:
+        description: >-
+          Paths kept out of the scan, one glob per line. `*` crosses `/`, so dist/* drops the
+          subtree. guarddog has no ignore file of its own.
+        type: string
+        default: ""
+      guarddog-exclude-rules:
+        description: >-
+          Rules to drop, one per line. Bare names apply to every ecosystem scanned; scope one
+          with pypi:<rule>.
+        type: string
+        default: ""
+      guarddog-include-dev-dependencies:
+        description: Add npm devDependencies to a registry verify, which reads dependencies only.
+        type: boolean
+        default: false
+      guarddog-sandbox:
+        description: >-
+          Keep guarddog's kernel sandbox around archive extraction and analysis. False runs
+          untrusted package code unsandboxed.
+        type: boolean
+        default: true
 
       actionlint-extra-labels:
         description: Newline-separated runner labels this repo uses beyond the fleet set.
@@ -199,6 +248,19 @@ jobs:
         uses: notambourine/wormhook@1270e6a1e7dc2fad0a0abe738a1c56c6e6496cff # v0.31.1
         with:
           mode: ${{ inputs.wormhook-mode }}
+
+      - name: guarddog
+        if: ${{ inputs.guarddog && !cancelled() }}
+        uses: $/tools/guarddog
+        with:
+          local-scan: ${{ inputs.guarddog-local-scan }}
+          actions: ${{ inputs.guarddog-actions }}
+          registry-verify: ${{ inputs.guarddog-registry-verify }}
+          ecosystems: ${{ inputs.guarddog-ecosystems }}
+          exclude-paths: ${{ inputs.guarddog-exclude-paths }}
+          exclude-rules: ${{ inputs.guarddog-exclude-rules }}
+          include-dev-dependencies: ${{ inputs.guarddog-include-dev-dependencies }}
+          sandbox: ${{ inputs.guarddog-sandbox }}
 
       - name: pnpm-pin
         if: ${{ inputs.pnpm-pin && !cancelled() }}
