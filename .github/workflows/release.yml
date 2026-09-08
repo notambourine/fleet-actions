@@ -16,6 +16,9 @@ jobs:
   release:
     runs-on: ubuntu-slim
     timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: write
     steps:
       - name: validate, publish, and promote v1
         shell: bash
