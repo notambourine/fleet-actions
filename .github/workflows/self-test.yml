@@ -64,31 +64,45 @@ jobs:
           done
           echo "shellcheck clean across $n run blocks"
 
-  actionlint-pin:
-    runs-on: ubuntu-slim
+  actionlint-planted:
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: kjanat/actionlint pin resolves to a digest-pinned image
+      - name: Plant a workflow with a known error
         run: |
-          PIN=$(grep -oE 'kjanat/actionlint@[0-9a-f]{40}' .github/workflows/fleet-ci.yml |
-            head -1 | cut -d@ -f2)
-          if [ -z "$PIN" ]; then
-            echo "::error::no 40-char kjanat/actionlint pin found in fleet-ci.yml"; exit 1
-          fi
-          IMAGE=$(curl -fsSL "https://raw.githubusercontent.com/kjanat/actionlint/$PIN/action.yml" |
-            sed -n 's/^[[:space:]]*image:[[:space:]]*//p')
-          echo "kjanat/actionlint@$PIN image: $IMAGE"
-          case "$IMAGE" in
-            *@sha256:*) ;;
-            *) echo "::error::pinned action.yml image is not digest-pinned: $IMAGE"; exit 1 ;;
-          esac
-          if ! grep -q 'dependency-name: kjanat/actionlint' .github/dependabot.yml; then
-            echo "::error::dependabot.yml no longer ignores kjanat/actionlint; drop this assertion too"
-            exit 1
-          fi
+          mkdir -p planted
+          # An unknown event and an unknown checkout input. No expression syntax here: the
+          # runner would expand it before the file is written.
+          cat > planted/bad.yml <<'EOF'
+          on: pushh
+          jobs:
+            bad:
+              runs-on: ubuntu-latest
+              steps:
+                - uses: actions/checkout@v7
+                  with:
+                    no-such-input: true
+          EOF
+      - id: lint
+        continue-on-error: true
+        uses: ./tools/actionlint
+        with:
+          files: planted/bad.yml
+          shellcheck: "false"
+          pyflakes: "false"
+      - name: Assert the planted error failed the action
+        env:
+          OUTCOME: ${{ steps.lint.outcome }}
+          RESULT: ${{ steps.lint.outputs.result }}
+          COUNT: ${{ steps.lint.outputs.problem-count }}
+        run: |
+          echo "outcome=$OUTCOME result=$RESULT problems=$COUNT"
+          [ "$OUTCOME" = failure ] || { echo "::error::action passed a planted error"; exit 1; }
+          [ "$RESULT" = problems-found ] || { echo "::error::result was $RESULT, not problems-found"; exit 1; }
+          [ "${COUNT:-0}" -ge 1 ] || { echo "::error::problem-count was '$COUNT'"; exit 1; }
 
   changes:
     runs-on: ubuntu-slim

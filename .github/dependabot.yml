@@ -21,6 +21,17 @@ updates:
         patterns:
           - "*"
 
+  # The actionlint image pin lives in a one-line Dockerfile because github-actions
+  # updates never touch a docker:// reference or the image inside a third-party action.yml.
+  - package-ecosystem: docker
+    directory: /tools/actionlint
+    schedule:
+      interval: cron
+      cronjob: "0 9 * * 1,3"
+      timezone: America/Chicago
+    cooldown:
+      default-days: 3
+
   - package-ecosystem: github-actions
     directory: /
     schedule:
@@ -29,9 +40,6 @@ updates:
       timezone: America/Chicago
     cooldown:
       default-days: 3
-    ignore:
-      # Release tags use a mutable container tag. self-test verifies this commit's digest pin.
-      - dependency-name: kjanat/actionlint
     groups:
       actions:
         patterns:
