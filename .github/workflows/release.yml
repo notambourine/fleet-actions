@@ -25,8 +25,8 @@ jobs:
           TAG: ${{ github.ref_name }}
           SHA: ${{ github.sha }}
         run: |
-          if [[ ! "$TAG" =~ ^v1\.(0|[1-9][0-9]*)(\.(0|[1-9][0-9]*))?$ ]]; then
-            echo "::error::Expected a stable v1.N or v1.N.P tag, got $TAG"; exit 1
+          if [[ ! "$TAG" =~ ^v1\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::Expected a stable v1.N.P tag, got $TAG"; exit 1
           fi
           TAG_SHA=$(gh api "repos/$REPO/commits/$TAG" --jq .sha)
           if [ "$TAG_SHA" != "$SHA" ]; then
@@ -45,8 +45,8 @@ jobs:
 
           RELEASES=$(gh api --paginate "repos/$REPO/releases" | jq -s 'add')
           PUBLISHED=$(jq -r '.[] | select(.draft == false and .prerelease == false) |
-            .tag_name | select(test("^v1\\.(0|[1-9][0-9]*)(\\.(0|[1-9][0-9]*))?$"))' <<<"$RELEASES")
-          # Numeric comparison does not order v1.1 and v1.0.1 correctly.
+            .tag_name | select(test("^v1\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"))' <<<"$RELEASES")
+          # Lexical comparison does not order v1.9.0 and v1.10.0 correctly.
           LATEST=$(printf '%s\n%s\n' "$TAG" "$PUBLISHED" | grep . | sort -V | tail -1)
           if [ "$LATEST" != "$TAG" ]; then
             echo "Skipping $TAG: $LATEST is already published"; exit 0

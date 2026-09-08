@@ -3,7 +3,8 @@
 Treat every workflow change as a fleet-wide CI change.
 
 - Land changes through squash pull requests.
-- Tag patches and dependency updates as `v1.N.P`. Tag input changes as `v1.N`.
+- Tag every release as `v1.N.P`. Bump `N` for input changes and `P` for everything else.
+  The release workflow rejects a two-part `v1.N` tag.
 - Keep `refs/tags/v1` mutable. The release workflow promotes it.
 - Pin actions to 40-character SHAs and label them with immutable release tags.
 - Resolve every dependency through a SHA pin Dependabot rewrites, or verify its provenance
