@@ -20,6 +20,25 @@ permissions:
 jobs:
   fleet-actions:
     uses: notambourine/fleet-actions/.github/workflows/fleet-ci.yml@<sha> # v1.0.1
+    # Every check defaults to true. Set its name to false to disable it.
+    # with:
+    #   scan-mode: git # betterleaks scans the full history.
+    #   wormhook-mode: deep # Includes tracked node_modules when present.
+    #   betterleaks-pr-range: false # Scan history, not only PR commits.
+    #   dash-force-zero: false # Reject new dashes without policing old ones.
+    #   dash-exclude: | # Built-in exclusions only; add pathspecs here.
+    #     docs/vendor/**
+    #   tripwire-allow: | # Empty by default; add content exceptions here.
+    #     docs/security.md
+    #   guarddog-registry-verify: false # Do not download declared dependencies.
+    #   guarddog-ecosystems: auto # Infer ecosystems from tracked manifests.
+    #   guarddog-minimum-risk: suspicious # Low-risk findings remain visible.
+    #   guarddog-exclude-paths: | # Empty; add tracked globs here.
+    #     dist/*
+    #   guarddog-exclude-rules: | # Empty; scope rules with ecosystem:rule.
+    #     pypi:repository_integrity_mismatch
+    #   actionlint-extra-labels: | # Empty; add custom runner labels here.
+    #     large-runner
 ```
 
 All checks are enabled by default. The workflow reports one check named
@@ -35,34 +54,6 @@ tag=$(gh api repos/notambourine/fleet-actions/releases/latest -q .tag_name)
 ```
 
 Use `@$sha # $tag`. Do not use `@v1` or label a commit pin `# v1`.
-
-## Configuration
-
-Override only what the repository needs. Set any check name (`betterleaks`,
-`zizmor`, `actionlint`, `dashes`, `tripwire`, `wormhook`, `pnpm-pin`, or
-`guarddog`) to `false` to disable it.
-
-```yaml
-jobs:
-  fleet-actions:
-    uses: notambourine/fleet-actions/.github/workflows/fleet-ci.yml@<sha> # v1.0.1
-    with:
-      betterleaks-pr-range: true # Scan only commits in the pull request.
-      dash-force-zero: true # Reject every Unicode dash instead of ratcheting.
-      dash-exclude: | # Add repo-relative glob pathspecs to the defaults.
-        docs/vendor/**
-      tripwire-allow: | # Permit IOC literals in matching file contents.
-        docs/security.md
-      guarddog-registry-verify: true # Download and score declared dependencies.
-      guarddog-ecosystems: npm # Otherwise inferred from manifests.
-      guarddog-minimum-risk: high # Default: suspicious.
-      guarddog-exclude-paths: | # Skip tracked paths; a workflow skips its actions too.
-        dist/*
-      guarddog-exclude-rules: | # Suppress a rule for every scan or one ecosystem.
-        pypi:repository_integrity_mismatch
-      actionlint-extra-labels: | # Add repository-specific runner labels.
-        large-runner
-```
 
 [The reusable workflow](.github/workflows/fleet-ci.yml) documents every input and
 default. It also merges `.github/actionlint.yaml` or `.github/actionlint.yml` from
