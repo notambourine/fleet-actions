@@ -19,6 +19,8 @@ permissions:
 
 jobs:
   fleet-actions:
+    permissions:
+      contents: read
     uses: notambourine/fleet-actions/.github/workflows/fleet-ci.yml@<sha> # v1.0.1
     # Every check but guarddog defaults to true. Set its name to false to disable it.
     # with:
@@ -42,7 +44,20 @@ jobs:
     #     left-pad@1.3.0
     #   actionlint-extra-labels: | # Empty; add custom runner labels here.
     #     large-runner
+    #   actionlint-require-permissions: job # workflow, or off, relaxes it.
+    #   actionlint-job-timeout-min: 5 # 0 drops the bound.
+    #   actionlint-job-timeout-max: 15 # ubuntu-slim kills a job at 15 anyway.
 ```
+
+## Job permissions and timeouts
+
+actionlint enforces two fleet policies. Every job in the calling repository, including
+the one calling this workflow, must declare `permissions:`. An empty `permissions: {}`
+satisfies the policy; neither scope judges whether the grants are minimal. Every job must also declare a
+`timeout-minutes:` between 5 and 15; a job calling a reusable workflow is exempt, since
+a caller-side timeout does not reach it.
+
+Relax either through the inputs above rather than by disabling `actionlint`.
 
 Every check except `guarddog` is enabled by default. The workflow reports one check named
 `<workflow name> / <calling job>`, so these two names are load-bearing: the

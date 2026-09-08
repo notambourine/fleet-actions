@@ -12,6 +12,8 @@ permissions:
 
 jobs:
   fleet-ci:
+    permissions:
+      contents: read
     uses: ./.github/workflows/fleet-ci.yml
     with:
       dash-exclude-defaults: false
@@ -20,6 +22,8 @@ jobs:
   betterleaks-self-scan:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -30,6 +34,8 @@ jobs:
   betterleaks-pinned-version:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -48,6 +54,8 @@ jobs:
   betterleaks-shellcheck:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -68,6 +76,8 @@ jobs:
   actionlint-planted:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -104,10 +114,47 @@ jobs:
           [ "$OUTCOME" = failure ] || { echo "::error::action passed a planted error"; exit 1; }
           [ "$RESULT" = problems-found ] || { echo "::error::result was $RESULT, not problems-found"; exit 1; }
           [ "${COUNT:-0}" -ge 1 ] || { echo "::error::problem-count was '$COUNT'"; exit 1; }
+      - name: Plant a workflow the fleet policy defaults reject
+        run: |
+          # Correct in every other respect: only the missing permissions and the
+          # out-of-range timeout may fail it.
+          cat > planted/policy.yml <<'EOF'
+          on: push
+          jobs:
+            uncapped:
+              runs-on: ubuntu-latest
+              timeout-minutes: 120
+              steps:
+                - run: echo hi
+          EOF
+          cat > planted/policy-config.yml <<'EOF'
+          policy:
+            require-permissions: {scope: job}
+            require-job-timeout: {min-minutes: 5, max-minutes: 15}
+          EOF
+      - id: policy
+        continue-on-error: true
+        uses: ./tools/actionlint
+        with:
+          files: planted/policy.yml
+          config-file: planted/policy-config.yml
+          shellcheck: "false"
+          pyflakes: "false"
+      - name: Assert the policy caught both
+        env:
+          OUTCOME: ${{ steps.policy.outcome }}
+          OUTPUT: ${{ steps.policy.outputs.output }}
+        run: |
+          printf '%s\n' "$OUTPUT"
+          [ "$OUTCOME" = failure ] || { echo "::error::policy passed a job with no permissions and a 120m timeout"; exit 1; }
+          printf '%s' "$OUTPUT" | grep -q permissions || { echo "::error::no permissions finding"; exit 1; }
+          printf '%s' "$OUTPUT" | grep -q timeout || { echo "::error::no timeout finding"; exit 1; }
 
   changes:
     runs-on: ubuntu-slim
     timeout-minutes: 5
+    permissions:
+      contents: read
     outputs:
       tools: ${{ steps.detect.outputs.tools }}
     steps:
@@ -140,6 +187,8 @@ jobs:
     if: needs.changes.outputs.tools != '[]'
     runs-on: ubuntu-slim
     timeout-minutes: 10
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:

@@ -187,6 +187,26 @@ on:
         description: Newline-separated runner labels this repo uses beyond the fleet set.
         type: string
         default: ""
+      actionlint-require-permissions:
+        description: >-
+          Scope at which a workflow must declare token permissions: job, workflow, or off.
+          job covers jobs calling a reusable workflow. Neither scope judges whether the
+          grants are minimal.
+        type: string
+        default: job
+      actionlint-job-timeout-min:
+        description: >-
+          Lowest timeout-minutes a job may declare, 5 through 60, or 0 to drop the bound.
+          A job with no timeout-minutes fails any bound; a job calling a reusable workflow
+          is exempt, since a caller-side timeout does not apply to it.
+        type: number
+        default: 5
+      actionlint-job-timeout-max:
+        description: >-
+          Highest timeout-minutes a job may declare, 5 through 60, or 0 to drop the bound.
+          The fleet default matches ubuntu-slim's own 15-minute kill.
+        type: number
+        default: 15
       actionlint-config-extra:
         description: Raw actionlint config YAML merged over the fleet config and the caller's own file.
         type: string
@@ -203,6 +223,8 @@ jobs:
   fleet:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -238,7 +260,21 @@ jobs:
         env:
           EXTRA_LABELS: ${{ inputs.actionlint-extra-labels }}
           CONFIG_EXTRA: ${{ inputs.actionlint-config-extra }}
+          REQUIRE_PERMISSIONS: ${{ inputs.actionlint-require-permissions }}
+          TIMEOUT_MIN: ${{ inputs.actionlint-job-timeout-min }}
+          TIMEOUT_MAX: ${{ inputs.actionlint-job-timeout-max }}
         run: |
+          case "$REQUIRE_PERMISSIONS" in
+            job)      PERMISSIONS="{scope: job}" ;;
+            workflow) PERMISSIONS="true" ;;
+            off)      PERMISSIONS="" ;;
+            *) echo "::error::actionlint-require-permissions was '$REQUIRE_PERMISSIONS', not job, workflow, or off"; exit 1 ;;
+          esac
+
+          BOUNDS=()
+          if [ "$TIMEOUT_MIN" -gt 0 ]; then BOUNDS+=("min-minutes: $TIMEOUT_MIN"); fi
+          if [ "$TIMEOUT_MAX" -gt 0 ]; then BOUNDS+=("max-minutes: $TIMEOUT_MAX"); fi
+
           {
             echo "self-hosted-runner:"
             echo "  labels:"
@@ -247,6 +283,14 @@ jobs:
             printf '%s\n' "$EXTRA_LABELS" | while IFS= read -r label; do
               if [ -n "$label" ]; then echo "    - $label"; fi
             done
+            # An empty policy mapping is a config error, so emit the key only when it has one.
+            if [ -n "$PERMISSIONS" ] || [ ${#BOUNDS[@]} -gt 0 ]; then
+              echo "policy:"
+              if [ -n "$PERMISSIONS" ]; then echo "  require-permissions: $PERMISSIONS"; fi
+              if [ ${#BOUNDS[@]} -gt 0 ]; then
+                printf '  require-job-timeout: {%s}\n' "$(IFS=,; echo "${BOUNDS[*]}")"
+              fi
+            fi
           } > "${RUNNER_TEMP}/fleet.yml"
 
           # config-file disables actionlint's default config discovery.
