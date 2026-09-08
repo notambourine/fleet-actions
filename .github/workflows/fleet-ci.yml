@@ -31,6 +31,13 @@ on:
         description: Assert package.json declares packageManager.
         type: boolean
         default: true
+      vet:
+        description: >-
+          Fail on a dependency carrying a known advisory or marked malicious. The only gate
+          covering vulnerable-but-honest dependencies; costs a keyless query to SafeDep's
+          insights API per scanned package.
+        type: boolean
+        default: true
       guarddog:
         description: >-
           GuardDog malware heuristics over the tracked tree and referenced actions. Opt-in:
@@ -94,6 +101,30 @@ on:
         description: >-
           Globs whose CONTENT may carry IOC literals, such as a security README. Filename,
           hash, and lifecycle checks are never exempted.
+        type: string
+        default: ""
+
+      vet-severity:
+        description: >-
+          Lowest advisory severity that fails the job, cumulative: high covers critical.
+          none gates on malware alone.
+        type: string
+        default: high
+      vet-malware:
+        description: >-
+          Also fail on a package OSV marks malicious. Overlaps wormhook on npm and reaches
+          the ecosystems wormhook does not.
+        type: boolean
+        default: true
+      vet-policy:
+        description: >-
+          Repo-relative vet filter suite replacing the generated one. It takes over
+          vet-severity and vet-malware, so the file owns the whole decision. This is where
+          a license or scorecard gate goes.
+        type: string
+        default: ""
+      vet-exclude:
+        description: Paths kept out of the scan, one vet exclusion pattern per line.
         type: string
         default: ""
 
@@ -261,6 +292,15 @@ jobs:
         uses: notambourine/wormhook@1270e6a1e7dc2fad0a0abe738a1c56c6e6496cff # v0.31.1
         with:
           mode: ${{ inputs.wormhook-mode }}
+
+      - name: vet
+        if: ${{ inputs.vet && !cancelled() }}
+        uses: $/tools/vet
+        with:
+          severity: ${{ inputs.vet-severity }}
+          malware: ${{ inputs.vet-malware }}
+          policy: ${{ inputs.vet-policy }}
+          exclude: ${{ inputs.vet-exclude }}
 
       - name: guarddog
         if: ${{ inputs.guarddog && !cancelled() }}

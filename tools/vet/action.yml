@@ -1,0 +1,35 @@
+name: vet
+description: >-
+  Fail the job when a dependency carries a known advisory or is a known malicious package,
+  using vet from a digest-pinned image.
+author: NoTambourine LLC
+branding:
+  icon: shield
+  color: green
+
+inputs:
+  severity:
+    description: >-
+      Lowest advisory severity that fails the job, cumulative: high covers critical too.
+      none gates on malware alone.
+    default: high
+  malware:
+    description: Also fail on a package OSV marks malicious (a MAL- identifier).
+    default: "true"
+  policy:
+    description: >-
+      Repo-relative vet filter suite replacing the generated one. Takes over severity and
+      malware, so the file owns the whole decision.
+    default: ""
+  exclude:
+    description: Paths kept out of the scan, one vet exclusion pattern per line.
+    default: ""
+
+runs:
+  using: docker
+  image: Dockerfile
+  env:
+    VET_SEVERITY: ${{ inputs.severity }}
+    VET_MALWARE: ${{ inputs.malware }}
+    VET_POLICY: ${{ inputs.policy }}
+    VET_EXCLUDE: ${{ inputs.exclude }}
