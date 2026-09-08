@@ -108,13 +108,34 @@ pin. That is the tradeoff: the ruleset only advances when a bump lands.
 The upstream README recommends `uvx guarddog`, which resolves the tool and its whole
 tree from PyPI on every run. No bot gates that.
 
+`overrides.txt` carries the pins that a release's own metadata gets wrong. guarddog 3.2.0
+caps `tarsafe<0.0.6`, but 0.0.6 fixes a directory traversal in `extractall`, which is the
+call that unpacks the untrusted archives a scan reads. Upstream widened the bound to
+`^0.0.6` after 3.2.0 shipped, so the cap is stale metadata rather than an incompatibility.
+Without the override the group bump is unresolvable and CI keeps the vulnerable tarsafe.
+
+An override is still hash-pinned: uv rejects an entry that lacks `==` and a hash under
+`--require-hashes`, so nothing here resolves at run time either. The install asserts each
+override actually landed, because a widened upstream bound makes one stop applying
+silently. Drop an entry once the release it works around ships the fix.
+
 Regenerate the pin with:
 
 ```bash
 echo guarddog==<version> |
-  uv pip compile --generate-hashes --universal --python-version 3.12 - \
+  uv pip compile --generate-hashes --universal --python-version 3.12 \
+    --override tools/guarddog/overrides.txt - \
     -o tools/guarddog/requirements.txt
 ```
+
+Compile with `--override` too, or the next regeneration quietly reverts every pin the
+overrides file wins.
+
+Dependabot reads this as a plain requirements file, not as compiled output, so it raises
+each pin to the newest release without consulting guarddog's own constraints. A monthly
+group PR can therefore propose versions that cannot resolve at all. Answer one by
+recompiling rather than by editing the proposed pins: the resolver keeps whatever the
+constraints actually allow, and a bump that survives is a bump that installs.
 
 Keep `--python-version` and the action's `python-version` input in step. The install
 step asserts the binary reports the version the file pins.
