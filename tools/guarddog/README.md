@@ -130,10 +130,11 @@ does not appear in.
 
 ## Install
 
-`requirements.txt` is a hash-pinned resolution of `guarddog` and its 33 transitive
-dependencies, installed with `uv pip install --require-hashes`. Nothing resolves a
-version at run time, and Dependabot's `pip` entry for this directory is what moves the
-pin. That is the tradeoff: the ruleset only advances when a bump lands.
+`requirements.in` names the one version this tool actually chooses; `requirements.txt` is
+its hash-pinned resolution, `guarddog` plus 33 transitive dependencies, installed with
+`uv pip install --require-hashes`. Nothing resolves a version at run time, and Renovate's
+`pip-compile` manager is what moves the pin. That is the tradeoff: the ruleset only
+advances when a bump lands.
 
 The upstream README recommends `uvx guarddog`, which resolves the tool and its whole
 tree from PyPI on every run. No bot gates that.
@@ -149,26 +150,29 @@ An override is still hash-pinned: uv rejects an entry that lacks `==` and a hash
 override actually landed, because a widened upstream bound makes one stop applying
 silently. Drop an entry once the release it works around ships the fix.
 
-Regenerate the pin with:
+Regenerate the pin by editing the version in `requirements.in` and running:
 
 ```bash
-echo guarddog==<version> |
-  uv pip compile --generate-hashes --universal --python-version 3.12 \
-    --override tools/guarddog/overrides.txt - \
-    -o tools/guarddog/requirements.txt
+uv pip compile --generate-hashes --universal --python-version 3.12 \
+  --override tools/guarddog/overrides.txt \
+  tools/guarddog/requirements.in -o tools/guarddog/requirements.txt
 ```
 
 Compile with `--override` too, or the next regeneration quietly reverts every pin the
 overrides file wins.
 
-Dependabot reads this as a plain requirements file, not as compiled output, so it raises
-each pin to the newest release without consulting guarddog's own constraints. A monthly
-group PR can therefore propose versions that cannot resolve at all. Answer one by
-recompiling rather than by editing the proposed pins: the resolver keeps whatever the
-constraints actually allow, and a bump that survives is a bump that installs.
+Renovate's `pip-compile` manager re-runs exactly that command, which is why the header
+uv writes has to stay: the manager reads the command out of it, and both the source file
+and `--python-version` have to be in there for it to reproduce the resolve. A hand-written
+header, or compiling from stdin, and the manager never activates. Renovate also keeps
+transitive pins out of version updates entirely, so the only pip PR this directory sees is
+a real guarddog release, re-resolved. Dependabot instead read the file as hand-written and
+raised each line to the newest release without consulting guarddog's own constraints,
+which made most of its PRs unresolvable on arrival.
 
-Keep `--python-version` and the action's `python-version` input in step. The install
-step asserts the binary reports the version the file pins.
+Keep `--python-version` and the action's `python-version` input in step; Renovate reads
+the interpreter from that flag. The install step asserts the binary reports the version
+the file pins.
 
 The file's length is the hashes, not `--universal`. `--generate-hashes` emits every wheel
 hash a release published, whatever the platform, so resolving for linux alone drops one

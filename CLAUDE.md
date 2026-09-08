@@ -7,10 +7,11 @@ Treat every workflow change as a fleet-wide CI change.
 - Tag every release as `v1.N.P`. Bump `N` for input changes and `P` for everything else.
   The release workflow rejects a two-part `v1.N` tag.
 - Keep `refs/tags/v1` mutable. The release workflow promotes it.
-- Pin actions to 40-character SHAs and label them with immutable release tags.
-- Resolve every dependency through a SHA pin Dependabot rewrites, or verify its provenance
+- Pin actions to 40-character SHAs and label them with immutable release tags. Renovate
+  skips a bare SHA it cannot identify.
+- Resolve every dependency through a SHA pin Renovate rewrites, or verify its provenance
   in the step. Never let a step resolve a version at run time.
-- Keep the moving part in `uses:`. Dependabot does not rewrite a version inside `with:`.
+- Keep the moving part in `uses:`. Renovate does not rewrite a version inside `with:`.
 - Keep every gate in the single `fleet` job and use `!cancelled()` on gate steps.
 - Report findings by failing the job. Never route them to a separate surface.
 - Add `tools/<name>/test/run.sh` with every new script-backed tool.

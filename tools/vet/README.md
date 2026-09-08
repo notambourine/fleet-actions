@@ -5,9 +5,9 @@ marks malicious.
 
 This is the surface no other fleet gate covers. wormhook, tripwire, and guarddog look for
 malicious code: install-time exfiltration, worm payloads, packages that were never
-legitimate. None of them notices an honest dependency with a published CVE. Dependabot
-does, asynchronously, after the merge; this gate blocks the pull request that introduces
-one.
+legitimate. None of them notices an honest dependency with a published CVE. The update
+proposer does, asynchronously, after the merge; this gate blocks the pull request that
+introduces one.
 
 ## What runs
 
@@ -21,7 +21,7 @@ A repo with no package manifest passes without a scan.
 ## The pin, and what it does not cover
 
 `Dockerfile` pins `ghcr.io/safedep/vet` by tag and digest, which is the one form
-Dependabot's docker ecosystem rewrites. vet-action cannot be the pin: with no `version` it
+Renovate's docker manager rewrites. vet-action cannot be the pin: with no `version` it
 asks GitHub for the latest vet release and downloads it unverified, and a `version` in
 `with:` is a string no updater rewrites.
 

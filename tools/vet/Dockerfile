@@ -1,4 +1,4 @@
-# Dependabot's docker ecosystem rewrites this line, tag and digest together. vet-action
+# Renovate's docker manager rewrites this line, tag and digest together. vet-action
 # resolves its binary from the latest GitHub release at run time and takes its version
 # through `with:`, so neither the action nor a github-actions update can be the pin.
 FROM ghcr.io/safedep/vet:v1.19.0@sha256:6832b2780cd8633d171d0c37500e6fb182ef57c5f553984b34c680845a5eac55

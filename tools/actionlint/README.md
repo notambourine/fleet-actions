@@ -9,11 +9,11 @@ Callers reach this through `fleet-ci.yml`'s `actionlint*` inputs.
 
 The fork's release tags point at a commit whose `action.yml` references the container
 by mutable tag. A digest lands one commit later, under the floating `v1.N` tag, which
-no `v1.N.P` tag ever points at. Pinning that commit meant a Dependabot `ignore`, a
+no `v1.N.P` tag ever points at. Pinning that commit meant an updater `ignore`, a
 manual re-resolve per release, and a self-test job to prove the digest was still there.
 
-`Dockerfile` here is a single `FROM image:tag@sha256:...`. Dependabot's docker
-ecosystem rewrites tag and digest together, so the pin moves through an ordinary bump
+`Dockerfile` here is a single `FROM image:tag@sha256:...`. Renovate's docker
+manager rewrites tag and digest together, so the pin moves through an ordinary bump
 PR and nothing floats. The image's entrypoint is the action, so `action.yml` only
 mirrors the fork's inputs and positional `args`.
 

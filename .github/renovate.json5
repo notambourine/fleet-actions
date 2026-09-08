@@ -1,0 +1,48 @@
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  extends: ["config:recommended"],
+  // helpers:pinGitHubActionDigests is for repos still on tags. Every `uses:` here is
+  // already a 40-character SHA with a release-tag comment, which Renovate maintains.
+  timezone: "America/Chicago",
+  semanticCommits: "disabled",
+  commitMessagePrefix: "deps:",
+  // Renovate cron is hour-granular and the minute field must be `*`, so this is a
+  // 9am window rather than an instant.
+  schedule: ["* 9 * * 1,3"],
+  minimumReleaseAge: "3 days",
+  dependencyDashboard: true,
+
+  // guarddog's install is `uv pip compile` output. The manager re-runs that command
+  // instead of raising each line to the newest release, which is what Dependabot did
+  // and why its monthly PR proposed versions guarddog's own metadata forbids.
+  // The pattern must match the compiled `.txt`; Renovate reads the source `.in` from
+  // the command in its header.
+  "pip-compile": {
+    managerFilePatterns: ["/^tools/guarddog/requirements\\.txt$/"],
+  },
+  // pip-compile updates the source file itself, so leaving these on handles it twice.
+  pip_requirements: { enabled: false },
+  pip_setup: { enabled: false },
+
+  packageRules: [
+    {
+      matchUpdateTypes: ["minor", "patch"],
+      groupName: "minor-and-patch",
+    },
+    {
+      matchUpdateTypes: ["major"],
+      minimumReleaseAge: "5 days",
+    },
+  ],
+
+  // Renovate owns security updates here, so GitHub's automated-security-fixes is
+  // paused: two proposers on one advisory is two PRs. This is also the only path to a
+  // transitive CVE in the hash-pinned tree. pip-compile keeps transitive deps out of
+  // version updates and enables them for alerts, fixing one with --upgrade-package.
+  // A CVE fix skips the cooldown and the schedule; nothing else does.
+  vulnerabilityAlerts: {
+    groupName: "security",
+    minimumReleaseAge: null,
+    schedule: [],
+  },
+}
