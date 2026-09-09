@@ -64,7 +64,7 @@ inputs:
     description: Lowest risk label that fails the action, low, suspicious, or high.
     default: suspicious
   python-version:
-    description: Interpreter uv provisions. Must match the version requirements.txt was compiled for.
+    description: Interpreter uv provisions. Must satisfy pyproject.toml.
     default: "3.12"
 
 outputs:
@@ -75,63 +75,27 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: guarddog pin
-      id: pin
-      shell: bash
-      run: |
-        set -euo pipefail
-        req="${GITHUB_ACTION_PATH}/requirements.txt"
-        ovr="${GITHUB_ACTION_PATH}/overrides.txt"
-        version=$(sed -n 's/^guarddog==\([^ ]*\).*/\1/p' "$req")
-        [ -n "$version" ] || { echo "::error::requirements.txt pins no guarddog version"; exit 1; }
-        # Cache key covers both hashed files and the interpreter, the only inputs to the
-        # install. setup-uv keys on the workspace, and these live in the action path instead.
-        if command -v sha256sum >/dev/null 2>&1; then
-          digest=$(cat "$req" "$ovr" | sha256sum)
-        else
-          digest=$(cat "$req" "$ovr" | shasum -a 256)
-        fi
-        printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
-        printf 'suffix=guarddog-%s-py%s\n' "${digest:0:12}" "$PY_VERSION" >> "$GITHUB_OUTPUT"
-      env:
-        PY_VERSION: ${{ inputs.python-version }}
-
     - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
       with:
         enable-cache: true
-        cache-suffix: ${{ steps.pin.outputs.suffix }}
+        working-directory: ${{ github.action_path }}
+        cache-dependency-glob: |
+          pyproject.toml
+          uv.lock
         python-version: ${{ inputs.python-version }}
 
     - name: Install guarddog
       id: install
       shell: bash
       env:
-        GD_VERSION: ${{ steps.pin.outputs.version }}
+        UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/guarddog-venv
       run: |
         set -euo pipefail
-        # Keep the venv out of the scanned workspace.
-        venv="${RUNNER_TEMP}/guarddog-venv"
-        uv venv "$venv"
-        # --require-hashes refuses any distribution the file does not pin, transitively.
-        # --override defeats a stale upper bound in a release's own metadata. uv holds it to
-        # the same bar: an override entry without == and a hash is rejected outright.
-        uv pip install --python "$venv/bin/python" --require-hashes \
-          --override "${GITHUB_ACTION_PATH}/overrides.txt" \
-          -r "${GITHUB_ACTION_PATH}/requirements.txt"
-        resolved=$("$venv/bin/guarddog" --version)
-        [ "$resolved" = "$GD_VERSION" ] || {
-          echo "::error::installed guarddog $resolved, requirements.txt pins $GD_VERSION"; exit 1; }
-        # An override silently stops applying once upstream widens the bound and the pin moves
-        # past it, so assert what landed rather than trusting the file to still bite.
-        while read -r name want; do
-          got=$("$venv/bin/python" -c 'import importlib.metadata as m,sys; print(m.version(sys.argv[1]))' "$name")
-          [ "$got" = "$want" ] || {
-            echo "::error::overrides.txt pins $name $want, installed $got"; exit 1; }
-          echo "override held: $name $got"
-        done < <(sed -n 's/^\([A-Za-z0-9._-]\{1,\}\)==\([^ \\]\{1,\}\).*/\1 \2/p' \
-          "${GITHUB_ACTION_PATH}/overrides.txt")
+        uv audit --project "$GITHUB_ACTION_PATH" --locked --no-dev
+        uv sync --project "$GITHUB_ACTION_PATH" --locked --no-dev --no-build
+        resolved=$("$UV_PROJECT_ENVIRONMENT/bin/guarddog" --version)
         printf 'version=%s\n' "$resolved" >> "$GITHUB_OUTPUT"
-        printf 'bin=%s\n' "$venv/bin/guarddog" >> "$GITHUB_OUTPUT"
+        printf 'bin=%s\n' "$UV_PROJECT_ENVIRONMENT/bin/guarddog" >> "$GITHUB_OUTPUT"
         echo "guarddog $resolved installed from the pinned tree"
 
     - name: guarddog verify
