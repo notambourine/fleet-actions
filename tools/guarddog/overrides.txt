@@ -1,5 +1,0 @@
-# guarddog 3.2.0 caps tarsafe<0.0.6, and 0.0.6 fixes a traversal bug on the path that
-# extracts scanned packages. Upstream took ^0.0.6 in DataDog/guarddog#858. Drop at 3.2.1.
-tarsafe==0.0.6 \
-    --hash=sha256:1636ed0a0ae4995862dbc647cf6e4ba49724d045f125f9d952216089a4bd6c79 \
-    --hash=sha256:f6724cd2482c574933db91b5edf2fe13bb5accafed686c2874d95ccef01d3f34

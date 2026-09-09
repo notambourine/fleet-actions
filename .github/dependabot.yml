@@ -1,14 +1,10 @@
 version: 2
 updates:
-  # guarddog's install is a hash-pinned requirements file, so its rules only move
-  # when Dependabot lands a bump here.
-  # Monthly, not Mon/Wed: botocore is in the pinned tree and releases most weekdays, so a
-  # faster cadence is a PR that moves a transitive pin and no rules. CVEs ignore this cron.
-  - package-ecosystem: pip
+  - package-ecosystem: uv
     directory: /tools/guarddog
     schedule:
       interval: cron
-      cronjob: "0 9 1 * *"
+      cronjob: "0 9 * * *"
       timezone: America/Chicago
     cooldown:
       default-days: 3
@@ -27,7 +23,7 @@ updates:
     directory: /tools/actionlint
     schedule:
       interval: cron
-      cronjob: "0 9 * * 1,3"
+      cronjob: "0 9 * * *"
       timezone: America/Chicago
     cooldown:
       default-days: 3
@@ -38,7 +34,7 @@ updates:
     directory: /tools/vet
     schedule:
       interval: cron
-      cronjob: "0 9 * * 1,3"
+      cronjob: "0 9 * * *"
       timezone: America/Chicago
     cooldown:
       default-days: 3
@@ -47,7 +43,7 @@ updates:
     directory: /
     schedule:
       interval: cron
-      cronjob: "0 9 * * 1,3"
+      cronjob: "0 9 * * *"
       timezone: America/Chicago
     cooldown:
       default-days: 3
