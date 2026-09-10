@@ -107,16 +107,19 @@ pins() {
 		printf '%s\n' "$files" |
 			grep -E '(^|/)(\.github/workflows/[^/]+\.ya?ml|action\.ya?ml)$' |
 			while IFS= read -r file; do
-				grep -hoE 'uses:[[:space:]]+[A-Za-z0-9._-]+/[A-Za-z0-9._/-]+@[0-9a-f]{40}([[:space:]]*#[[:space:]]*v?[0-9][0-9A-Za-z.+-]*)?' \
+				grep -hoE "uses:[[:space:]]+['\"]?[A-Za-z0-9._-]+/[A-Za-z0-9._/-]+@[0-9a-f]{40}['\"]?([[:space:]]*#[[:space:]]*v?[0-9][0-9A-Za-z.+-]*)?" \
 					"$file" 2>/dev/null
 			done |
-			sed -E 's/^uses:[[:space:]]+//' | sort -u |
+			tr -d "'\"" | sed -E 's/^uses:[[:space:]]+//' | sort -u |
 			while IFS= read -r line; do
 				ref=$(trim "${line%%#*}")
 				version=""
 				case "$line" in *'#'*) version=$(trim "${line#*#}") ;; esac
+				package="${ref%@*}"
+				repository="${package#*/}"
+				package="${package%%/*}/${repository%%/*}"
 				printf '%s\t%s\t%s\t%s\n' \
-					"${ref##*@}" "$ref" "${ref%@*}" "${version#v}"
+					"${ref##*@}" "$ref" "$package" "${version#v}"
 			done
 	fi
 
@@ -125,10 +128,10 @@ pins() {
 		printf '%s\n' "$files" |
 			grep -E '(^|/)Dockerfile[^/]*$' |
 			while IFS= read -r file; do
-				grep -hoE '^FROM[[:space:]]+[^[:space:]]+@sha256:[0-9a-f]{64}' \
+				grep -hioE '^[[:space:]]*FROM[[:space:]]+(--platform=[^[:space:]]+[[:space:]]+)?[^[:space:]]+@sha256:[0-9a-f]{64}' \
 					"$file" 2>/dev/null
 			done |
-			sed -E 's/^FROM[[:space:]]+//' | sort -u |
+			sed -E 's/^[[:space:]]*[Ff][Rr][Oo][Mm][[:space:]]+(--platform=[^[:space:]]+[[:space:]]+)?//' | sort -u |
 			while IFS= read -r ref; do
 				printf 'image\t%s\t\t\n' "$ref"
 			done
@@ -150,13 +153,30 @@ resolve_image() {
 	commit=$("$PINOSV_GH" api "repos/$owner/$repo/attestations/$digest" \
 		--jq '.attestations[0].bundle.dsseEnvelope.payload' 2>/dev/null |
 		base64 -d 2>/dev/null |
-		jq -r '.predicate.buildDefinition.resolvedDependencies[0].digest.gitCommit // empty' 2>/dev/null)
-	[ -n "$commit" ] || return 1
+		jq -r '.predicate.buildDefinition.resolvedDependencies[0].digest.gitCommit // empty' 2>/dev/null) || return 1
+	[[ "$commit" =~ ^[0-9a-f]{40}$ ]] || return 1
 	printf '%s' "$commit"
 }
 
 query() {
-	"$PINOSV_CURL" -sS --max-time 30 -X POST "$PINOSV_API" -d "$1" 2>/dev/null
+	local request="$1" payload="$1" page token seen=$'\n'
+	while :; do
+		page=$("$PINOSV_CURL" --fail -sS --max-time 30 -X POST "$PINOSV_API" -d "$payload") || return 1
+		[ -n "$page" ] || { echo 'OSV returned nothing' >&2; return 1; }
+		# OSV omits vulns for a clean result; error envelopes must not count as clean.
+		jq -es 'length == 1 and (.[0] | type == "object" and
+			(keys - ["vulns", "next_page_token"] | length == 0) and
+			((has("vulns") | not) or (.vulns | type == "array" and all(.[];
+				type == "object" and (.id | type == "string" and length > 0)))) and
+			((has("next_page_token") | not) or (.next_page_token | type == "string")))' \
+			<<<"$page" >/dev/null || return 1
+		printf '%s\n' "$page"
+		token=$(jq -r '.next_page_token // empty' <<<"$page")
+		[ -n "$token" ] || break
+		[[ "$seen" != *$'\n'"$token"$'\n'* ]] || return 1
+		seen+="$token"$'\n'
+		payload=$(jq -c --arg token "$token" '. + {page_token: $token}' <<<"$request") || return 1
+	done
 }
 
 findings=0
@@ -193,16 +213,19 @@ while IFS=$'\t' read -r commit ref package version; do
 	fi
 
 	scanned=$((scanned + 1))
-	response=$(query "{\"commit\":\"$commit\"}")
-	[ -n "$response" ] || fail "OSV query for $ref returned nothing"
+	response=$(query "{\"commit\":\"$commit\"}") || fail "OSV commit query failed for $ref"
 
 	# OSV holds an advisory under a GIT range, under package coordinates, or under
 	# one and not the other, so both are asked and the identifiers are merged.
 	if [ -n "$package" ] && [ -n "$version" ]; then
-		response+=$'\n'$(query "$(printf '{"package":{"name":"%s","ecosystem":"GitHub Actions"},"version":"%s"}' \
-			"$package" "$version")")
+		package_response=$(query "$(printf '{"package":{"name":"%s","ecosystem":"GitHub Actions"},"version":"%s"}' \
+			"$package" "$version")") || fail "OSV package query failed for $ref"
+		response+=$'\n'"$package_response"
 	fi
 
+	advisories=$(jq -rs '[.[] | (.vulns // [])[]] | unique_by(.id)[] |
+		[.id, (.database_specific.severity // "")] | @tsv' <<<"$response") ||
+		fail "OSV findings could not be read for $ref"
 	while IFS=$'\t' read -r id severity; do
 		[ -n "$id" ] || continue
 		waived "$id" && {
@@ -221,8 +244,7 @@ while IFS=$'\t' read -r commit ref package version; do
 		[ "$(rank "$severity")" -ge "$THRESHOLD" ] || continue
 		printf '::error::%s carries %s (%s) at %s\n' "$ref" "$id" "${severity:-unrated}" "$commit"
 		findings=$((findings + 1))
-	done < <(jq -rs '[.[] | (.vulns // [])[]] | unique_by(.id)[] |
-		[.id, (.database_specific.severity // "")] | @tsv' <<<"$response" 2>/dev/null)
+	done <<<"$advisories"
 done < <(pins)
 
 if [ "$PINOSV_PLAN_ONLY" = true ]; then
@@ -230,7 +252,7 @@ if [ "$PINOSV_PLAN_ONLY" = true ]; then
 fi
 
 if [ "$findings" -gt 0 ]; then
-	fail "$findings finding(s) across $scanned pin(s)"
+	fail "$findings finding(s) across $scanned queried pin(s), $unresolved unresolved"
 fi
 
 echo "pin-osv: $scanned pin(s) clean at OSV, $unresolved unresolved"

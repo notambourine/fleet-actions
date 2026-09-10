@@ -234,6 +234,74 @@ else
 	printf '%s\n' "$out" | sed 's/^/     /'
 fi
 
+run_case "an omitted vulns array is clean" 0 "clean at OSV" \
+	PINOSV_IMAGES=false PINOSV_CURL="$(stub_curl omitted '{}')"
+for body in '{"code":3,"message":"invalid hash"}' '<html>Bad Gateway</html>' \
+	'{"vulns":null}' '{"vulns":[{}]}' '[]'; do
+	run_case "invalid OSV body fails: $body" 1 "OSV commit query failed" \
+		PINOSV_IMAGES=false PINOSV_CURL="$(stub_curl invalid "$body")"
+done
+run_case "a bad package response cannot erase a commit finding" 1 "OSV package query failed" \
+	PINOSV_ROOT="$VREPO" PINOSV_IMAGES=false \
+	PINOSV_CURL="$(stub_router invalid-package "$osv_high" '<html>Bad Gateway</html>')"
+run_case "an empty package response fails" 1 "OSV package query failed" \
+	PINOSV_ROOT="$VREPO" PINOSV_IMAGES=false \
+	PINOSV_CURL="$(stub_router empty-package "$osv_none" '')"
+
+cat >"$TMP/http-failure" <<'EOF'
+#!/bin/bash
+printf '%s\n' '{}'
+exit 22
+EOF
+chmod +x "$TMP/http-failure"
+run_case "a failed request with a body fails" 1 "OSV commit query failed" \
+	PINOSV_IMAGES=false PINOSV_CURL="$TMP/http-failure"
+
+cat >"$TMP/paginated" <<'EOF'
+#!/bin/bash
+case "$*" in
+*'"page_token":"next"'*)
+	printf '%s\n' '{"vulns":[{"id":"GHSA-test-page","database_specific":{"severity":"HIGH"}}]}' ;;
+*) printf '%s\n' '{"next_page_token":"next"}' ;;
+esac
+EOF
+chmod +x "$TMP/paginated"
+run_case "a finding on a later commit page fails" 1 "GHSA-test-page" \
+	PINOSV_IMAGES=false PINOSV_CURL="$TMP/paginated"
+cat >"$TMP/package-paginated" <<EOF
+#!/bin/bash
+case "\$*" in
+*'"commit"'*) printf '%s\n' '{}' ;;
+*) exec "$TMP/paginated" "\$@" ;;
+esac
+EOF
+chmod +x "$TMP/package-paginated"
+run_case "a finding on a later package page fails" 1 "GHSA-test-page" \
+	PINOSV_ROOT="$VREPO" PINOSV_IMAGES=false PINOSV_CURL="$TMP/package-paginated"
+run_case "a repeated page token fails" 1 "OSV commit query failed" \
+	PINOSV_IMAGES=false PINOSV_CURL="$(stub_curl repeated '{"next_page_token":"next"}')"
+
+run_case "an invalid attestation commit is unresolved" 1 "no readable build attestation" \
+	PINOSV_ACTIONS=false PINOSV_REQUIRE_ATTESTATION=true \
+	PINOSV_GH="$(stub_gh invalid 'not-a-commit')"
+
+SREPO=$(fixture syntax)
+cat >"$SREPO/.github/workflows/ci.yml" <<EOF
+on: push
+jobs:
+  a:
+    steps:
+      - uses: 'acme/widget/sub@${CLEAN_SHA}' # v1.2.3
+      - uses: "acme/second@${DIRTY_SHA}" # v2.3.4
+EOF
+printf '  from --platform=linux/amd64 ghcr.io/acme/widget:v1@%s\n' "$DIGEST" >"$SREPO/tools/thing/Dockerfile"
+run_case "a quoted subpath action uses repository coordinates" 0 "and acme/widget@1.2.3" \
+	PINOSV_ROOT="$SREPO" PINOSV_IMAGES=false PINOSV_PLAN_ONLY=true
+run_case "a double quoted action is discovered" 0 "and acme/second@2.3.4" \
+	PINOSV_ROOT="$SREPO" PINOSV_IMAGES=false PINOSV_PLAN_ONLY=true
+run_case "a platform image is checked for attestation" 1 "no readable build attestation" \
+	PINOSV_ROOT="$SREPO" PINOSV_ACTIONS=false PINOSV_REQUIRE_ATTESTATION=true PINOSV_GH="$GH_NONE"
+
 echo
 echo "${cases} cases, ${fails} failed"
 [ "$fails" -eq 0 ]
