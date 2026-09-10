@@ -28,6 +28,17 @@ updates:
     cooldown:
       default-days: 3
 
+  # Same reason as actionlint: the upstream release assets carry no reference an updater
+  # rewrites, so the image digest is the only pin Dependabot can hold for betterleaks.
+  - package-ecosystem: docker
+    directory: /tools/betterleaks
+    schedule:
+      interval: cron
+      cronjob: "0 9 * * *"
+      timezone: America/Chicago
+    cooldown:
+      default-days: 3
+
   # Same reason as actionlint: an image reference is invisible to github-actions updates,
   # and vet-action's own version input is a string no updater rewrites.
   - package-ecosystem: docker

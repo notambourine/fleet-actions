@@ -123,12 +123,11 @@ The two `false` values avoid repeating the fleet scan. Keep wormhook enabled in
 
 | Path | Check |
 | --- | --- |
-| `tools/betterleaks` | Verified betterleaks installation and scan. |
+| `tools/betterleaks` | Secret scan from a digest-pinned betterleaks image. |
 | `tools/dashes` | Unicode dash ratchet. |
 | `tools/guarddog` | Malware heuristics over the tracked tree and referenced actions. |
 | `tools/pnpm-pin` | Exact `packageManager` version. |
 | `tools/tripwire` | Supply-chain persistence indicators. |
 
-Script-backed tool suites live in `tools/<name>/test/run.sh`. Betterleaks is tested
-through named workflow jobs. Pull requests run affected suites; pushes and schedules
-run all suites.
+Script-backed tool suites live in `tools/<name>/test/run.sh`. Pull requests run
+affected suites; pushes and schedules run all suites.
