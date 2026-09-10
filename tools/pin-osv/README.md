@@ -29,7 +29,7 @@ commit query cannot reach. An action pin is therefore asked both ways and the
 identifiers are merged.
 
 The version comes from the trailing release comment the pinning convention already
-requires (`@<sha> # v7.0.1`), so the second query costs no extra request. A pin without
+requires (`@<sha> # v7.0.1`), so no tag lookup is needed. A pin without
 one is asked by commit alone. No OSV ecosystem holds container images, so an image is
 always a commit query alone.
 
@@ -47,8 +47,7 @@ package query is here so the gate starts working the day that changes.
 An image whose attestation cannot be read is **unresolved**, never clean. It is reported
 either way; `require-attestation` decides whether it also fails the job. That input is
 off by default because most published images carry no attestation, which makes an
-unresolved image a coverage gap to report rather than a finding against the pin. Of this
-repo's own three image pins, only one is attested.
+unresolved image a coverage gap to report rather than a finding against the pin.
 
 A local action (`./tools/...`, or the `$/` the release rewrites) has no upstream commit
 and is skipped.
@@ -65,8 +64,10 @@ so `severity: none` still fails on malware alone.
 
 ## What it does not cover
 
-The attestation proves which commit an image was built from, not that the build was
-reproducible from it. A maintainer whose account is compromised can poison the release
+The resolver reads attestations from GitHub's repository API without independently
+verifying their signatures. It trusts GitHub's upload authorization and the publishing
+repository's provenance claim; it does not establish build reproducibility.
+A maintainer whose account is compromised can poison the release
 workflow and produce a valid attestation over poisoned output. Cooldown in
 `dependabot.yml` and reading the release diff remain the answer there.
 
