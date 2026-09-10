@@ -45,7 +45,7 @@ run_case() {
 	local name="$1" root="$2" want_rc="$3" want_out="$4" out rc ok=1
 	shift 4
 	cases=$((cases + 1))
-	out=$(env BL_ROOT="$root" BL_PLAN_ONLY=true "$@" bash "$RUN" 2>&1)
+	out=$(env -u GIT_CONFIG_COUNT BL_ROOT="$root" BL_PLAN_ONLY=true "$@" bash "$RUN" 2>&1)
 	rc=$?
 	[ "$rc" -eq "$want_rc" ] || ok=0
 	case "$out" in *"$want_out"*) ;; *) ok=0 ;; esac
@@ -63,7 +63,7 @@ refute_case() {
 	local name="$1" root="$2" reject="$3" out
 	shift 3
 	cases=$((cases + 1))
-	out=$(env BL_ROOT="$root" BL_PLAN_ONLY=true "$@" bash "$RUN" 2>&1)
+	out=$(env -u GIT_CONFIG_COUNT BL_ROOT="$root" BL_PLAN_ONLY=true "$@" bash "$RUN" 2>&1)
 	case "$out" in
 	*"$reject"*)
 		fails=$((fails + 1))
@@ -98,6 +98,11 @@ run_case "dir warns and drops log-opts" "$full" 0 "apply to scan: git only" \
 	BL_SCAN=dir BL_LOG_OPTS="--no-merges a..b"
 refute_case "dir passes no log-opts" "$full" "--log-opts" \
 	BL_SCAN=dir BL_LOG_OPTS="--no-merges a..b"
+
+run_case "safe.directory reaches git without HOME" "$full" 0 \
+	"git: safe.directory at GIT_CONFIG_KEY_0 of 1"
+run_case "a caller's git config entries survive" "$full" 0 \
+	"git: safe.directory at GIT_CONFIG_KEY_2 of 3" GIT_CONFIG_COUNT=2
 
 if [ -d "$shallow/.git" ]; then
 	run_case "shallow clone fails the git scan" "$shallow" 1 "set fetch-depth: 0"

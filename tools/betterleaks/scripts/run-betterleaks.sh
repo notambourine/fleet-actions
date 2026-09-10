@@ -33,6 +33,13 @@ esac
 [[ "$BL_REDACT" =~ ^(100|[0-9]{1,2})$ ]] ||
 	fail "redact must be 0-100 (got '$BL_REDACT')"
 
+# The action overrides HOME, so the image's baked safe.directory never loads and git
+# calls the mounted workspace dubiously owned. GIT_CONFIG_* does not depend on HOME.
+git_index="${GIT_CONFIG_COUNT:-0}"
+export "GIT_CONFIG_KEY_${git_index}=safe.directory"
+export "GIT_CONFIG_VALUE_${git_index}=*"
+export GIT_CONFIG_COUNT=$((git_index + 1))
+
 log_opts="$BL_LOG_OPTS"
 if [ -z "$log_opts" ] && [ "$BL_PR_RANGE" = true ] && [ -n "$BL_PR_BASE" ]; then
 	log_opts="--no-merges ${BL_PR_BASE}..${BL_PR_HEAD}"
@@ -56,6 +63,7 @@ fi
 
 if [ "$BL_PLAN_ONLY" = true ]; then
 	printf 'plan: %s %s\n' "$BL_BIN" "${args[*]}"
+	printf 'git: safe.directory at GIT_CONFIG_KEY_%s of %s\n' "$git_index" "$GIT_CONFIG_COUNT"
 	exit 0
 fi
 
