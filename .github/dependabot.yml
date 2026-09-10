@@ -7,7 +7,7 @@ updates:
       cronjob: "0 9 * * *"
       timezone: America/Chicago
     cooldown:
-      default-days: 3
+      default-days: 7
     groups:
       guarddog:
         patterns:
@@ -26,7 +26,7 @@ updates:
       cronjob: "0 9 * * *"
       timezone: America/Chicago
     cooldown:
-      default-days: 3
+      default-days: 7
 
   # Same reason as actionlint: the upstream release assets carry no reference an updater
   # rewrites, so the image digest is the only pin Dependabot can hold for betterleaks.
@@ -37,7 +37,7 @@ updates:
       cronjob: "0 9 * * *"
       timezone: America/Chicago
     cooldown:
-      default-days: 3
+      default-days: 7
 
   # Same reason as actionlint: an image reference is invisible to github-actions updates,
   # and vet-action's own version input is a string no updater rewrites.
@@ -48,7 +48,7 @@ updates:
       cronjob: "0 9 * * *"
       timezone: America/Chicago
     cooldown:
-      default-days: 3
+      default-days: 7
 
   - package-ecosystem: github-actions
     directory: /
@@ -57,7 +57,7 @@ updates:
       cronjob: "0 9 * * *"
       timezone: America/Chicago
     cooldown:
-      default-days: 3
+      default-days: 7
     groups:
       actions:
         patterns:
