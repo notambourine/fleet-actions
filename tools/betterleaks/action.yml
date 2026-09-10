@@ -1,3 +1,4 @@
+# Suite coverage marker.
 name: betterleaks secret scan
 description: >-
   Run betterleaks against the checked-out repository from a digest-pinned image.

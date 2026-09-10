@@ -1,3 +1,4 @@
+# Suite coverage marker.
 name: vet
 description: >-
   Check declared dependencies for known advisories and malware with a digest-pinned vet image.

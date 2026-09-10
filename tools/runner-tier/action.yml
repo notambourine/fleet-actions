@@ -1,3 +1,4 @@
+# Suite coverage marker.
 name: runner-tier
 description: >-
   Find ubuntu-latest jobs that can use ubuntu-slim. Reads workflow files offline.

@@ -1,3 +1,4 @@
+# Suite coverage marker.
 name: dash-ratchet
 description: >-
   Diff-scoped unicode-dash gate for pull requests: no dash on a line the PR
