@@ -257,6 +257,8 @@ concurrency:
 jobs:
   fleet:
     runs-on: ubuntu-latest
+    # 15m: every gate runs in this one job, and the slowest pull three container images
+    # plus a uv resolve before scanning. timeout-minutes below that starves guarddog.
     timeout-minutes: 15
     permissions:
       contents: read

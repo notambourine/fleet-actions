@@ -19,6 +19,8 @@ updates:
 
   # The actionlint image pin lives in a one-line Dockerfile because github-actions
   # updates never touch a docker:// reference or the image inside a third-party action.yml.
+  # One FROM per directory, so an `applies-to: security-updates` group cannot batch below
+  # the single PR Dependabot already opens.
   - package-ecosystem: docker
     directory: /tools/actionlint
     schedule:
@@ -30,6 +32,7 @@ updates:
 
   # Same reason as actionlint: the upstream release assets carry no reference an updater
   # rewrites, so the image digest is the only pin Dependabot can hold for betterleaks.
+  # Single FROM, so no security-updates group either.
   - package-ecosystem: docker
     directory: /tools/betterleaks
     schedule:
@@ -41,6 +44,7 @@ updates:
 
   # Same reason as actionlint: an image reference is invisible to github-actions updates,
   # and vet-action's own version input is a string no updater rewrites.
+  # Single FROM, so no security-updates group either.
   - package-ecosystem: docker
     directory: /tools/vet
     schedule:
