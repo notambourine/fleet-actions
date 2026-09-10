@@ -42,6 +42,10 @@ jobs:
     #     pypi:repository_integrity_mismatch
     #   guarddog-exclude-packages: | # Empty; drops one package, not a rule.
     #     left-pad@1.3.0
+    #   pin-osv-severity: high # An unrated OSV record always counts as critical.
+    #   pin-osv-require-attestation: false # Unresolved images warn, they do not fail.
+    #   pin-osv-allow: | # Empty; waives one OSV identifier.
+    #     GHSA-0000-0000-0000
     #   actionlint-extra-labels: | # Empty; add custom runner labels here.
     #     large-runner
     #   actionlint-require-permissions: job # workflow, or off, relaxes it.
@@ -126,6 +130,7 @@ The two `false` values avoid repeating the fleet scan. Keep wormhook enabled in
 | `tools/betterleaks` | Secret scan from a digest-pinned betterleaks image. |
 | `tools/dashes` | Unicode dash ratchet. |
 | `tools/guarddog` | Malware heuristics over the tracked tree and referenced actions. |
+| `tools/pin-osv` | OSV advisories and malware at the commit behind each action and image pin. |
 | `tools/pnpm-pin` | Exact `packageManager` version. |
 | `tools/tripwire` | Supply-chain persistence indicators. |
 

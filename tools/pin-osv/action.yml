@@ -1,0 +1,55 @@
+name: pin-osv
+description: >-
+  Resolve every SHA-pinned action and digest-pinned base image to its source commit and
+  fail the job when OSV reports an advisory or malware there.
+author: NoTambourine LLC
+branding:
+  icon: git-commit
+  color: red
+
+inputs:
+  severity:
+    description: >-
+      Lowest advisory severity that fails the job, cumulative: high covers critical.
+      An OSV record with no severity label counts as critical, so an unrated
+      compromise report is never dropped. none gates on malware alone.
+    default: high
+  malware:
+    description: Also fail on a MAL- identifier at the pinned commit.
+    default: "true"
+  actions:
+    description: "Query the commit behind each `uses: owner/repo@<sha>` pin."
+    default: "true"
+  images:
+    description: Query the commit behind each digest-pinned Dockerfile FROM.
+    default: "true"
+  require-attestation:
+    description: >-
+      Fail an image whose build attestation cannot be read, rather than warning that it
+      went unqueried. Off because most published images carry no attestation, so an
+      unresolved image is a coverage gap to report, not a finding against the pin.
+    default: "false"
+  allow:
+    description: OSV identifiers to waive, one per line.
+    default: ""
+  exclude:
+    description: Pin references kept out of the scan, one glob per line.
+    default: ""
+  token:
+    description: Token used to read build attestations. Needs no scope beyond public read.
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        PINOSV_SEVERITY: ${{ inputs.severity }}
+        PINOSV_MALWARE: ${{ inputs.malware }}
+        PINOSV_ACTIONS: ${{ inputs.actions }}
+        PINOSV_IMAGES: ${{ inputs.images }}
+        PINOSV_REQUIRE_ATTESTATION: ${{ inputs.require-attestation }}
+        PINOSV_ALLOW: ${{ inputs.allow }}
+        PINOSV_EXCLUDE: ${{ inputs.exclude }}
+        GH_TOKEN: ${{ inputs.token }}
+      run: bash "${GITHUB_ACTION_PATH}/scripts/run-pin-osv.sh"
