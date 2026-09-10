@@ -108,7 +108,6 @@ jobs:
           printf '%s' "$OUTPUT" | grep -q timeout || { echo "::error::no timeout finding"; exit 1; }
 
   tools:
-    # ubuntu-slim lacks the cores needed to run tool suites concurrently.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

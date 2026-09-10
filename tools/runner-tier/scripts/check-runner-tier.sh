@@ -4,8 +4,14 @@ set -uo pipefail
 
 FILES=${RUNNER_TIER_FILES:-}
 EXCLUDE=${RUNNER_TIER_EXCLUDE:-}
+PRIVATE=${RUNNER_TIER_PRIVATE:-true}
 
 TOP=$(git rev-parse --show-toplevel 2>/dev/null) || TOP="${GITHUB_WORKSPACE:-$PWD}"
+
+if [ "$PRIVATE" != true ]; then
+	echo "runner-tier: public repositories have no billed Linux runner savings"
+	exit 0
+fi
 
 if ! command -v yq >/dev/null 2>&1; then
 	echo "::error::runner-tier requires yq (mikefarah v4)"
@@ -54,6 +60,7 @@ QUERY='.jobs // {} | to_entries[] | [
 HEAVY='(npm|pnpm|yarn|bun) +(ci|install)|pip +install|uv +(sync|pip)|bundle +(install|exec)'
 HEAVY="$HEAVY"'|cargo +(build|test|fetch)|go +(build|test)|(mvn|gradle|make|cmake) '
 HEAVY="$HEAVY"'|setup-(ruby|java|python|go|dotnet|haskell)|corepack|playwright +install'
+HEAVY="$HEAVY"'|bash |sh |[.]/|/scripts/|wait '
 
 # No `\b`: BSD regex has no such escape, so each alternative carries its own trailing space
 # where a bare substring would misfire.
@@ -82,25 +89,6 @@ for f in "${wf[@]}"; do
 		exit 2
 	fi
 
-	# An in-tree `uses: ./x` (or `$/x`) keeps `using: docker` in the action's own file, so the
-	# step text never says docker. Joined per job, because yq's `as $v` re-emits every binding.
-	docker_jobs=""
-	local_refs=$(yq -r '.jobs // {} | to_entries[] | .key + "\t"
-		+ ([(.value.steps // [])[] | .uses // "" | select(test("^[.$]/"))] | join(" "))' \
-		"$f" 2>/dev/null)
-	while IFS=$'\t' read -r j refs; do
-		[ -n "$refs" ] || continue
-		for lref in $refs; do
-			# `#*/` because the prefix is `./` or `$/` and both end at the first slash.
-			for m in "$TOP/${lref#*/}/action.yml" "$TOP/${lref#*/}/action.yaml"; do
-				[ -f "$m" ] || continue
-				if [ "$(yq -r '.runs.using // ""' "$m" 2>/dev/null)" = docker ]; then
-					docker_jobs="${docker_jobs} ${j} "
-				fi
-			done
-		done
-	done <<<"$local_refs"
-
 	while IFS=$'\t' read -r job runson is_reusable has_container has_services tmo line steps note; do
 		[ -n "$job" ] || continue
 		[ "$is_reusable" = true ] && continue
@@ -108,17 +96,16 @@ for f in "${wf[@]}"; do
 		[ "$runson" = ubuntu-latest ] || continue
 		total=$((total + 1))
 		[ "$has_container" = true ] || [ "$has_services" = true ] && continue
-		case "$steps" in *step-security/harden-runner* | *docker*) continue ;; esac
-		case "$docker_jobs" in *" ${job} "*) continue ;; esac
+		case "$steps" in *'"uses":'* | *docker*) continue ;; esac
 		[[ "$steps" =~ $HEAVY ]] && continue
 		[[ "$steps" =~ $SLIMGAP ]] && continue
 		case "$note" in *ubuntu-slim*) continue ;; esac
 		case "$tmo" in '' | 0 | *[!0-9]*) continue ;; esac
-		[ "$tmo" -gt 15 ] && continue
+		[ "$tmo" -gt 5 ] && continue
 		excluded "$job" && continue
 
 		found=$((found + 1))
-		echo "::error file=${rel},line=${line}::job '${job}' can use ubuntu-slim; change runs-on or add an ubuntu-slim waiver comment"
+		echo "::notice file=${rel},line=${line}::consider ubuntu-slim for lightweight job '${job}'"
 	done <<<"$rows"
 done
 
@@ -127,8 +114,8 @@ if [ "$total" -eq 0 ]; then
 	exit 0
 fi
 if [ "$found" -eq 0 ]; then
-	echo "runner-tier: ${total} ubuntu-latest job(s) require that runner"
+	echo "runner-tier: no clear ubuntu-slim suggestions among ${total} ubuntu-latest job(s)"
 	exit 0
 fi
-echo "runner-tier: ${found} of ${total} ubuntu-latest job(s) could run on ubuntu-slim"
+echo "runner-tier: suggested ubuntu-slim for ${found} of ${total} ubuntu-latest job(s)"
 exit 1

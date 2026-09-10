@@ -31,6 +31,7 @@ run_case() {
 	local name="$1" want_rc="$2" want_out="$3" out rc ok=1
 	cases=$((cases + 1))
 	out=$(cd "$REPO" && RUNNER_TIER_EXCLUDE="${EXCLUDE:-}" RUNNER_TIER_FILES="${FILES:-}" \
+		RUNNER_TIER_PRIVATE="${PRIVATE:-true}" \
 		bash "$CHECK" 2>&1)
 	rc=$?
 	[ "$rc" -eq "$want_rc" ] || ok=0
@@ -52,8 +53,9 @@ jobs:
     timeout-minutes: 5
     steps:
       - run: echo hi'
-run_case "flags eligible job" 1 "job 'lint' can use ubuntu-slim"
-run_case "counts eligible job" 1 "1 of 1 ubuntu-latest job(s) could run on ubuntu-slim"
+run_case "suggests eligible job" 1 "consider ubuntu-slim for lightweight job 'lint'"
+run_case "counts suggestion" 1 "suggested ubuntu-slim for 1 of 1 ubuntu-latest job(s)"
+PRIVATE=false run_case "skips public repository" 0 "public repositories have no billed Linux runner savings"
 
 new_repo slim
 wf 'on: push
@@ -78,7 +80,7 @@ jobs:
     container: node:22
     steps:
       - run: echo hi'
-run_case "excludes container" 0 "1 ubuntu-latest job(s) require that runner"
+run_case "excludes container" 0 "no clear ubuntu-slim suggestions"
 
 new_repo services
 wf 'on: push
@@ -91,7 +93,7 @@ jobs:
         image: postgres
     steps:
       - run: echo hi'
-run_case "excludes services" 0 "1 ubuntu-latest job(s) require that runner"
+run_case "excludes services" 0 "no clear ubuntu-slim suggestions"
 
 new_repo hardened
 wf 'on: push
@@ -102,7 +104,17 @@ jobs:
     steps:
       - uses: step-security/harden-runner@v2
       - run: echo hi'
-run_case "excludes harden-runner" 0 "require that runner"
+run_case "excludes harden-runner" 0 "no clear ubuntu-slim suggestions"
+
+new_repo action
+wf 'on: push
+jobs:
+  a:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4'
+run_case "excludes opaque action" 0 "no clear ubuntu-slim suggestions"
 
 new_repo heavy
 wf 'on: push
@@ -112,7 +124,20 @@ jobs:
     timeout-minutes: 5
     steps:
       - run: npm ci'
-run_case "excludes install command" 0 "require that runner"
+run_case "excludes install command" 0 "no clear ubuntu-slim suggestions"
+
+new_repo concurrent
+wf 'on: push
+jobs:
+  a:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: |
+          task-a &
+          task-b &
+          wait'
+run_case "excludes concurrent work" 0 "no clear ubuntu-slim suggestions"
 
 new_repo slimgap
 wf 'on: push
@@ -122,7 +147,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - run: envsubst < in > out'
-run_case "excludes missing tool" 0 "require that runner"
+run_case "excludes missing tool" 0 "no clear ubuntu-slim suggestions"
 
 new_repo uncapped
 wf 'on: push
@@ -131,17 +156,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: echo hi'
-run_case "excludes missing timeout" 0 "require that runner"
+run_case "excludes missing timeout" 0 "no clear ubuntu-slim suggestions"
 
 new_repo overcap
 wf 'on: push
 jobs:
   a:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 6
     steps:
       - run: echo hi'
-run_case "excludes timeout above 15" 0 "require that runner"
+run_case "excludes timeout above 5" 0 "no clear ubuntu-slim suggestions"
 
 new_repo reusable
 wf 'on: push
@@ -161,7 +186,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: ./tools/thing'
-run_case "excludes local docker action" 0 "require that runner"
+run_case "excludes local docker action" 0 "no clear ubuntu-slim suggestions"
 
 wf 'on: push
 jobs:
@@ -170,10 +195,10 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: $/tools/thing'
-run_case "excludes local docker action with \$/" 0 "require that runner"
+run_case "excludes local docker action with \$/" 0 "no clear ubuntu-slim suggestions"
 
 printf 'name: thing\nruns:\n  using: composite\n  steps: []\n' >"$REPO/tools/thing/action.yml"
-run_case "allows local composite action" 1 "job 'a' can use ubuntu-slim"
+run_case "excludes local composite action" 0 "no clear ubuntu-slim suggestions"
 
 new_repo waived
 wf 'on: push
@@ -184,7 +209,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - run: echo hi'
-run_case "requires waiver keyword" 1 "job 'a' can use ubuntu-slim"
+run_case "ignores unrelated comment" 1 "consider ubuntu-slim for lightweight job 'a'"
 
 wf 'on: push
 jobs:
@@ -194,7 +219,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - run: echo hi'
-run_case "accepts head-comment waiver" 0 "require that runner"
+run_case "accepts head-comment suppression" 0 "no clear ubuntu-slim suggestions"
 
 wf 'on: push
 jobs:
@@ -203,7 +228,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - run: echo hi'
-run_case "accepts line-comment waiver" 0 "require that runner"
+run_case "accepts line-comment suppression" 0 "no clear ubuntu-slim suggestions"
 
 new_repo excluded
 wf 'on: push
@@ -213,9 +238,9 @@ jobs:
     timeout-minutes: 5
     steps:
       - run: echo hi'
-run_case "flags unexcluded job" 1 "job 'e2e-chrome' can use ubuntu-slim"
-EXCLUDE='e2e-*' run_case "accepts exclude glob" 0 "require that runner"
-EXCLUDE='other-*' run_case "ignores unmatched glob" 1 "job 'e2e-chrome' can use ubuntu-slim"
+run_case "suggests unexcluded job" 1 "consider ubuntu-slim for lightweight job 'e2e-chrome'"
+EXCLUDE='e2e-*' run_case "accepts exclude glob" 0 "no clear ubuntu-slim suggestions"
+EXCLUDE='other-*' run_case "ignores unmatched glob" 1 "consider ubuntu-slim for lightweight job 'e2e-chrome'"
 
 new_repo files
 wf 'on: push
@@ -226,7 +251,7 @@ jobs:
     steps:
       - run: echo hi'
 FILES='.github/workflows/nope.yml' run_case "rejects missing file" 2 "no such workflow file"
-FILES='.github/workflows/ci.yml' run_case "scans named file" 1 "job 'a' can use ubuntu-slim"
+FILES='.github/workflows/ci.yml' run_case "scans named file" 1 "consider ubuntu-slim for lightweight job 'a'"
 
 new_repo unparsed
 printf 'jobs: [\n' >"$WF"
@@ -236,7 +261,7 @@ new_repo empty
 rm -rf "$REPO/.github"
 run_case "accepts empty workflow set" 0 "no workflow files to read"
 
-REPO="$REPO_ROOT" run_case "passes repository" 0 "require that runner"
+REPO="$REPO_ROOT" run_case "passes repository" 0 "no clear ubuntu-slim suggestions"
 
 echo
 echo "${cases} cases, ${fails} failed"

@@ -1,7 +1,7 @@
 # Suite coverage marker.
 name: runner-tier
 description: >-
-  Find ubuntu-latest jobs that can use ubuntu-slim. Reads workflow files offline.
+  Suggest ubuntu-slim for clearly suitable ubuntu-latest jobs.
 author: NoTambourine LLC
 branding:
   icon: dollar-sign
@@ -11,8 +11,7 @@ inputs:
     description: Repo-relative workflow paths, one per line. Empty scans .github/workflows.
     default: ""
   exclude:
-    description: >-
-      Excluded job-key globs, one per line. Use an ubuntu-slim comment for a single job.
+    description: Excluded job-key globs, one per line.
     default: ""
 runs:
   using: composite
@@ -21,4 +20,9 @@ runs:
       env:
         RUNNER_TIER_FILES: ${{ inputs.files }}
         RUNNER_TIER_EXCLUDE: ${{ inputs.exclude }}
-      run: bash "${GITHUB_ACTION_PATH}/scripts/check-runner-tier.sh"
+        RUNNER_TIER_PRIVATE: ${{ github.event.repository.private }}
+      run: |
+        RC=0
+        bash "${GITHUB_ACTION_PATH}/scripts/check-runner-tier.sh" || RC=$?
+        [ "$RC" -eq 1 ] && exit 0
+        exit "$RC"
