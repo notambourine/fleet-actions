@@ -22,10 +22,16 @@ jobs:
     permissions:
       contents: read
     uses: notambourine/fleet-actions/.github/workflows/fleet-ci.yml@<sha> # v1.0.1
-    # guarddog and runner-tier default to false. Other checks default to true.
+    # guarddog, runner-tier, and vet default to false. Other checks default to true.
     # with:
     #   guarddog: true
     #   runner-tier: true # Suggest clear ubuntu-slim cost savings in private repos.
+    #   vet: true # Advisories and malware in declared dependencies. Read "vet cost" below.
+    #   vet-severity: high # none gates on malware alone.
+    #   vet-policy: .github/vet/policy.yml # Replaces vet-severity and vet-malware.
+    #   vet-exclude: | # Empty; drop dev-only trees the scan does not need.
+    #     tools/performance/**
+    #   vet-cloud-tenant: acme.safedep.io # Pairs with the VET_CLOUD_KEY secret.
     #   runner-tier-exclude: | # Job-key globs to omit from suggestions.
     #     e2e-*
     #   scan-mode: git # betterleaks scans the full history.
@@ -72,10 +78,41 @@ Relax either through the inputs above rather than by disabling `actionlint`.
 Suggestions are notices and never fail CI. It stays silent for public repositories, local
 actions, concurrent work, builds, installs, services, containers, and jobs over five minutes.
 
-Every check except `guarddog` and `runner-tier` is enabled by default. The workflow reports one check named
+Every check except `guarddog`, `runner-tier`, and `vet` is enabled by default. The workflow reports one check named
 `<workflow name> / <calling job>`, so these two names are load-bearing: the
 example above reports `notambourine / fleet-actions`. This workflow's own job id
 never appears in the check name.
+
+## vet cost
+
+`vet` is opt-in because its runtime scales with the dependency count, not the diff.
+Keyless SafeDep enriches one package per request, so a tree declaring a thousand
+dependencies spends minutes inside a job that shares a 15-minute budget with every other
+gate. Blowing that budget loses the verdicts of the gates that already ran.
+
+Before enabling it, decide which lever fits:
+
+- Few manifests: enable it and pay seconds.
+- Large tree, dev tooling included: `vet-exclude` the trees that never ship.
+- Large tree, all of it shipping: get a free SafeDep key (`vet cloud quickstart`), store
+  it as `VET_CLOUD_KEY`, and pass `vet-cloud-tenant`. Authenticated Insights lifts the
+  rate ceiling and reaches private packages the community endpoint skips.
+- Deploy workflows: leave it off and run the full scan on a schedule instead. A scan on
+  the deploy path buys nothing a nightly does not, and it makes shipping wait on a
+  third-party API.
+
+Passing `VET_CLOUD_KEY` needs `secrets:` on the calling job:
+
+```yaml
+    uses: notambourine/fleet-actions/.github/workflows/fleet-ci.yml@<sha> # v1.8.0
+    with:
+      vet: true
+      vet-cloud-tenant: acme.safedep.io
+    secrets:
+      VET_CLOUD_KEY: ${{ secrets.VET_CLOUD_KEY }}
+```
+
+The key without the tenant fails the step; vet needs both.
 
 Pin the workflow to a commit and label it with the immutable release tag:
 
@@ -143,6 +180,7 @@ The two `false` values avoid repeating the fleet scan. Keep wormhook enabled in
 | `tools/pnpm-pin` | Exact `packageManager` version. |
 | `tools/runner-tier` | Conservative `ubuntu-slim` cost suggestions for private repositories. |
 | `tools/tripwire` | Supply-chain persistence indicators. |
+| `tools/vet` | Advisories and OSV malware records for declared dependencies. |
 
 Script-backed tool suites live in `tools/<name>/test/run.sh`. Pull requests run
 affected suites; pushes and schedules run all suites.

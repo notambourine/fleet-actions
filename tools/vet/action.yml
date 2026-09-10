@@ -22,6 +22,14 @@ inputs:
   exclude:
     description: Paths kept out of the scan, one vet exclusion pattern per line.
     default: ""
+  cloud-key:
+    description: >-
+      SafeDep API key. Scans against authenticated Insights instead of the community
+      endpoint. Needs cloud-tenant.
+    default: ""
+  cloud-tenant:
+    description: SafeDep tenant domain. Needs cloud-key.
+    default: ""
 
 runs:
   using: docker
@@ -31,3 +39,5 @@ runs:
     VET_MALWARE: ${{ inputs.malware }}
     VET_POLICY: ${{ inputs.policy }}
     VET_EXCLUDE: ${{ inputs.exclude }}
+    VET_CLOUD_KEY: ${{ inputs.cloud-key }}
+    VET_CLOUD_TENANT: ${{ inputs.cloud-tenant }}
