@@ -52,6 +52,13 @@ on:
           bump lands.
         type: boolean
         default: false
+      runner-tier:
+        description: >-
+          Fail a job asking for ubuntu-latest that needs nothing it provides over ubuntu-slim.
+          Opt-in: a cost heuristic has no business failing a pull request nobody pointed it at,
+          and the tier is a judgement about a job's own weight.
+        type: boolean
+        default: false
 
       scan-mode:
         description: betterleaks subcommand, git or dir. git fingerprints commits.
@@ -218,6 +225,14 @@ on:
         type: string
         default: suspicious
 
+      runner-tier-exclude:
+        description: >-
+          Jobs held out of the tier rule, one glob per line matched against the job key. Prefer
+          a comment naming ubuntu-slim on the job's runs-on, which keeps the reason beside the
+          job; this is for a pattern spanning jobs the caller does not own.
+        type: string
+        default: ""
+
       actionlint-extra-labels:
         description: Newline-separated runner labels this repo uses beyond the fleet set.
         type: string
@@ -349,6 +364,12 @@ jobs:
         with:
           format: github
           config-file: .actionlint-fleet.yml
+
+      - name: runner-tier
+        if: ${{ inputs.runner-tier && !cancelled() }}
+        uses: $/tools/runner-tier
+        with:
+          exclude: ${{ inputs.runner-tier-exclude }}
 
       - name: dashes
         if: ${{ inputs.dashes && !cancelled() }}

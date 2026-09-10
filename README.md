@@ -22,9 +22,14 @@ jobs:
     permissions:
       contents: read
     uses: notambourine/fleet-actions/.github/workflows/fleet-ci.yml@<sha> # v1.0.1
-    # Every check but guarddog defaults to true. Set its name to false to disable it.
+    # Every check but guarddog and runner-tier defaults to true. Set its name to false to
+    # disable it.
     # with:
-    #   guarddog: true # Off by default. The one check a caller opts into.
+    #   guarddog: true # Off by default. One of the two checks a caller opts into.
+    #   runner-tier: true # Off by default. Cost, not security: flags an ubuntu-latest job
+    #     that needs nothing ubuntu-slim lacks.
+    #   runner-tier-exclude: | # Empty; a comment naming ubuntu-slim waives one job.
+    #     e2e-*
     #   scan-mode: git # betterleaks scans the full history.
     #   wormhook-mode: deep # Includes tracked node_modules when present.
     #   betterleaks-pr-range: false # Scan history, not only PR commits.
@@ -63,7 +68,16 @@ a caller-side timeout does not reach it.
 
 Relax either through the inputs above rather than by disabling `actionlint`.
 
-Every check except `guarddog` is enabled by default. The workflow reports one check named
+## Runner tier
+
+`runner-tier` fails a job that asks for `ubuntu-latest` and needs nothing it provides over
+`ubuntu-slim` - no container, no services, no harden-runner, no docker, no install-or-build
+step, no tool missing from slim's image, and a `timeout-minutes` inside slim's 15-minute kill.
+Waive one job with a comment naming `ubuntu-slim` on its `runs-on`, or a pattern with
+`runner-tier-exclude`. See `tools/runner-tier/README.md` for the full disqualifier list and
+what to read before flipping a job.
+
+Every check except `guarddog` and `runner-tier` is enabled by default. The workflow reports one check named
 `<workflow name> / <calling job>`, so these two names are load-bearing: the
 example above reports `notambourine / fleet-actions`. This workflow's own job id
 never appears in the check name.
@@ -132,6 +146,7 @@ The two `false` values avoid repeating the fleet scan. Keep wormhook enabled in
 | `tools/guarddog` | Malware heuristics over the tracked tree and referenced actions. |
 | `tools/pin-osv` | OSV advisories and malware at the commit behind each action and image pin. |
 | `tools/pnpm-pin` | Exact `packageManager` version. |
+| `tools/runner-tier` | An `ubuntu-latest` job that needs nothing `ubuntu-slim` lacks. |
 | `tools/tripwire` | Supply-chain persistence indicators. |
 
 Script-backed tool suites live in `tools/<name>/test/run.sh`. Pull requests run

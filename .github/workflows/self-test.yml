@@ -18,6 +18,7 @@ jobs:
     with:
       dash-exclude-defaults: false
       guarddog: true # Opt-in for callers, so only the self-test covers the gate.
+      runner-tier: true # Same: opt-in for callers, so this is the only clean-case coverage.
 
   betterleaks-self-scan:
     runs-on: ubuntu-latest
