@@ -236,7 +236,11 @@ fi
 
 run_case "an omitted vulns array is clean" 0 "clean at OSV" \
 	PINOSV_IMAGES=false PINOSV_CURL="$(stub_curl omitted '{}')"
-for body in '{"code":3,"message":"invalid hash"}' '<html>Bad Gateway</html>' \
+run_case "an unknown response field is tolerated" 0 "clean at OSV" \
+	PINOSV_IMAGES=false PINOSV_CURL="$(stub_curl extra '{"vulns":[],"query_id":"abc"}')"
+run_case "an unknown field does not hide a finding" 1 "GHSA-test-high" \
+	PINOSV_IMAGES=false PINOSV_CURL="$(stub_curl extra-high '{"vulns":[{"id":"GHSA-test-high","database_specific":{"severity":"HIGH"}}],"query_id":"abc"}')"
+for body in '{"code":3,"message":"invalid hash"}' '{"error":"upstream"}' '<html>Bad Gateway</html>' \
 	'{"vulns":null}' '{"vulns":[{}]}' '[]'; do
 	run_case "invalid OSV body fails: $body" 1 "OSV commit query failed" \
 		PINOSV_IMAGES=false PINOSV_CURL="$(stub_curl invalid "$body")"

@@ -163,9 +163,10 @@ query() {
 	while :; do
 		page=$("$PINOSV_CURL" --fail -sS --max-time 30 -X POST "$PINOSV_API" -d "$payload") || return 1
 		[ -n "$page" ] || { echo 'OSV returned nothing' >&2; return 1; }
-		# OSV omits vulns for a clean result; error envelopes must not count as clean.
+		# OSV omits vulns for a clean result, so only the error envelope is rejected:
+		# v1 may add fields, and an allowlist would turn that into a fleet-wide outage.
 		jq -es 'length == 1 and (.[0] | type == "object" and
-			(keys - ["vulns", "next_page_token"] | length == 0) and
+			((has("code") or has("message") or has("error")) | not) and
 			((has("vulns") | not) or (.vulns | type == "array" and all(.[];
 				type == "object" and (.id | type == "string" and length > 0)))) and
 			((has("next_page_token") | not) or (.next_page_token | type == "string")))' \
