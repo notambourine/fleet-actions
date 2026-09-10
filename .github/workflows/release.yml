@@ -5,7 +5,6 @@ on:
     tags: ["v1.*"]
 
 permissions:
-  actions: read
   contents: write
 
 concurrency:
@@ -13,11 +12,16 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
-    runs-on: ubuntu-slim
-    timeout-minutes: 10
+  self-test:
     permissions:
-      actions: read
+      contents: read
+    uses: ./.github/workflows/self-test.yml
+
+  release:
+    needs: self-test
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
       contents: write
     steps:
       - name: validate, publish, and promote v1
@@ -39,26 +43,6 @@ jobs:
           if [ "$STATUS" != ahead ] && [ "$STATUS" != identical ]; then
             echo "::error::$SHA is not on main"; exit 1
           fi
-          # The tag push and the main push run concurrently, so this SHA's self-test run is
-          # usually still in flight. A single status read fails the release instead of waiting.
-          DEADLINE=$((SECONDS + 480))
-          while :; do
-            RUN=$(gh api --method GET "repos/$REPO/actions/workflows/self-test.yml/runs" \
-              -f head_sha="$SHA" -f branch=main -f event=push -f per_page=1 \
-              --jq '.workflow_runs[0] // {} | "\(.status // "missing") \(.conclusion // "none")"')
-            if [ "${RUN%% *}" = completed ]; then
-              break
-            fi
-            if [ "$SECONDS" -ge "$DEADLINE" ]; then
-              echo "::error::$SHA self-test is ${RUN%% *} after 8 minutes"; exit 1
-            fi
-            echo "self-test is ${RUN%% *} for $SHA; waiting"
-            sleep 15
-          done
-          if [ "${RUN##* }" != success ]; then
-            echo "::error::$SHA self-test concluded ${RUN##* }"; exit 1
-          fi
-
           RELEASES=$(gh api --paginate "repos/$REPO/releases" | jq -s 'add')
           PUBLISHED=$(jq -r '.[] | select(.draft == false and .prerelease == false) |
             .tag_name | select(test("^v1\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"))' <<<"$RELEASES")
