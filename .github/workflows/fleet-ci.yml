@@ -33,9 +33,12 @@ on:
         default: true
       vet:
         description: >-
-          Check declared dependencies for known advisories and malware. Queries SafeDep per package.
+          Check declared dependencies for known advisories and malware. Disabled by default
+          because keyless SafeDep enriches one package at a time, so a tree with a thousand
+          dependencies outlasts this job's budget and takes every other gate's verdict with
+          it. Supply vet-cloud-tenant and the VET_CLOUD_KEY secret to lift the ceiling.
         type: boolean
-        default: true
+        default: false
       pin-osv:
         description: >-
           Check action and base-image source commits against OSV. Uses one keyless query per pin.
@@ -124,6 +127,12 @@ on:
         default: ""
       vet-exclude:
         description: Paths kept out of the scan, one vet exclusion pattern per line.
+        type: string
+        default: ""
+      vet-cloud-tenant:
+        description: >-
+          SafeDep tenant domain. Pairs with the VET_CLOUD_KEY secret to scan against
+          authenticated Insights instead of the community endpoint.
         type: string
         default: ""
 
@@ -240,6 +249,11 @@ on:
         description: Raw actionlint config YAML merged over the fleet config and the caller's own file.
         type: string
         default: ""
+
+    secrets:
+      VET_CLOUD_KEY:
+        description: SafeDep API key. Needs vet-cloud-tenant; vet fails without it.
+        required: false
 
 permissions:
   contents: read
@@ -379,6 +393,8 @@ jobs:
           malware: ${{ inputs.vet-malware }}
           policy: ${{ inputs.vet-policy }}
           exclude: ${{ inputs.vet-exclude }}
+          cloud-key: ${{ secrets.VET_CLOUD_KEY }}
+          cloud-tenant: ${{ inputs.vet-cloud-tenant }}
 
       - name: pin-osv
         if: ${{ inputs.pin-osv && !cancelled() }}

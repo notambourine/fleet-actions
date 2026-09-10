@@ -9,15 +9,28 @@ VET_POLICY="${VET_POLICY:-}"
 VET_EXCLUDE="${VET_EXCLUDE:-}"
 VET_STAGE="${VET_STAGE:-${RUNNER_TEMP:-/tmp}}"
 VET_PLAN_ONLY="${VET_PLAN_ONLY:-false}"
-
-# Keyless access to https://api.safedep.io/insights-community/v1. Without it vet expects
-# a SafeDep API key and the scan errors instead of reporting.
-export VET_COMMUNITY_MODE="${VET_COMMUNITY_MODE:-true}"
+VET_CLOUD_KEY="${VET_CLOUD_KEY:-}"
+VET_CLOUD_TENANT="${VET_CLOUD_TENANT:-}"
 
 fail() {
 	printf '::error::%s\n' "$1" >&2
 	exit 1
 }
+
+if [ -n "$VET_CLOUD_KEY" ]; then
+	# Community Insights enriches one package per request, so a large tree costs minutes.
+	# An authenticated tenant lifts that ceiling and reaches private packages.
+	[ -n "$VET_CLOUD_TENANT" ] || fail "a cloud key needs cloud-tenant, the SafeDep tenant domain"
+	export VET_API_KEY="$VET_CLOUD_KEY"
+	export VET_CONTROL_TOWER_TENANT_ID="$VET_CLOUD_TENANT"
+	export VET_COMMUNITY_MODE=false
+	echo "vet: authenticated Insights, tenant $VET_CLOUD_TENANT"
+else
+	[ -z "$VET_CLOUD_TENANT" ] || fail "cloud-tenant needs a cloud key"
+	# Keyless access to https://api.safedep.io/insights-community/v1. Without it vet expects
+	# a SafeDep API key and the scan errors instead of reporting.
+	export VET_COMMUNITY_MODE="${VET_COMMUNITY_MODE:-true}"
+fi
 
 trim() {
 	local s="$1"

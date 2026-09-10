@@ -20,6 +20,7 @@ jobs:
       dash-exclude-defaults: false
       guarddog: true # Opt-in for callers, so only the self-test covers the gate.
       runner-tier: true # Opt-in for callers.
+      vet: true # Opt-in for callers. This tree declares two manifests, so the scan is cheap.
 
   betterleaks-self-scan:
     runs-on: ubuntu-latest

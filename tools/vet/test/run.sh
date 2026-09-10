@@ -127,24 +127,37 @@ run_case "fails on finding" "$npm" 1 "vet failed (exit 1)" \
 run_case "rejects missing binary" "$npm" 1 "not on PATH" \
 	VET_PLAN_ONLY=false VET_BIN="$TMP/nope/vet"
 
-cases=$((cases + 1))
 probe="$TMP/probe"
 mkdir -p "$probe"
 cat >"$probe/vet" <<'EOF'
 #!/bin/bash
-echo "community=${VET_COMMUNITY_MODE:-unset}"
+echo "community=${VET_COMMUNITY_MODE:-unset} key=${VET_API_KEY:-unset} tenant=${VET_CONTROL_TOWER_TENANT_ID:-unset}"
 EOF
 chmod +x "$probe/vet"
-out=$(env VET_ROOT="$npm" VET_STAGE="$TMP" VET_BIN="$probe/vet" PATH="$probe:$PATH" \
-	bash "$RUN" 2>&1)
-case "$out" in
-*"community=true"*) echo "ok   enables community mode" ;;
-*)
-	fails=$((fails + 1))
-	echo "FAIL enables community mode"
-	printf '%s\n' "$out" | sed 's/^/     /'
-	;;
-esac
+
+probe_case() {
+	local name="$1" want="$2" out
+	shift 2
+	cases=$((cases + 1))
+	out=$(env VET_ROOT="$npm" VET_STAGE="$TMP" VET_BIN="$probe/vet" PATH="$probe:$PATH" \
+		"$@" bash "$RUN" 2>&1)
+	case "$out" in
+	*"$want"*) echo "ok   ${name}" ;;
+	*)
+		fails=$((fails + 1))
+		echo "FAIL ${name} (output must contain '${want}')"
+		printf '%s\n' "$out" | sed 's/^/     /'
+		;;
+	esac
+}
+
+probe_case "enables community mode" "community=true key=unset tenant=unset"
+probe_case "authenticates with a cloud key" "community=false key=stub-key tenant=acme.example" \
+	VET_CLOUD_KEY=stub-key VET_CLOUD_TENANT=acme.example
+run_case "rejects a cloud key without a tenant" "$npm" 1 "needs cloud-tenant" \
+	VET_CLOUD_KEY=stub-key
+run_case "rejects a tenant without a cloud key" "$npm" 1 "needs a cloud key" \
+	VET_CLOUD_TENANT=acme.example
 
 echo
 echo "${cases} cases, ${fails} failed"
