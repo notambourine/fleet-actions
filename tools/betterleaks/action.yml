@@ -34,6 +34,15 @@ inputs:
     description: On pull_request, scan only the pull request's commits.
     required: false
     default: "false"
+  # runs.env on a docker action resolves inputs only, so the event context enters here.
+  pr-base:
+    description: Base commit for pr-range. Defaults to the pull request's base.
+    required: false
+    default: ${{ github.event.pull_request.base.sha }}
+  pr-head:
+    description: Head commit for pr-range. Defaults to the pull request's head.
+    required: false
+    default: ${{ github.event.pull_request.head.sha }}
 
 runs:
   using: docker
@@ -45,5 +54,5 @@ runs:
     BL_REDACT: ${{ inputs.redact }}
     BL_LOG_OPTS: ${{ inputs.log-opts }}
     BL_PR_RANGE: ${{ inputs.pr-range }}
-    BL_PR_BASE: ${{ github.event.pull_request.base.sha }}
-    BL_PR_HEAD: ${{ github.event.pull_request.head.sha }}
+    BL_PR_BASE: ${{ inputs.pr-base }}
+    BL_PR_HEAD: ${{ inputs.pr-head }}
