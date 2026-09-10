@@ -49,6 +49,7 @@ QUERY='.jobs // {} | to_entries[] | [
 	(.value | has("services")),
 	(.value["timeout-minutes"] // "-" | tostring),
 	(.value["runs-on"] | key | line),
+	((.value.steps // []) | map(has("uses")) | any),
 	((.value.steps // []) | tojson(0)),
 	((.value["runs-on"] | key | head_comment) + " "
 		+ (.value["runs-on"] | key | line_comment) + " "
@@ -89,14 +90,20 @@ for f in "${wf[@]}"; do
 		exit 2
 	fi
 
-	while IFS=$'\t' read -r job runson is_reusable has_container has_services tmo line steps note; do
+	while IFS=$'\t' read -r job runson is_reusable has_container has_services tmo line has_uses steps note; do
 		[ -n "$job" ] || continue
 		[ "$is_reusable" = true ] && continue
 		# Expressions and other runner labels are out of scope.
 		[ "$runson" = ubuntu-latest ] || continue
 		total=$((total + 1))
 		[ "$has_container" = true ] || [ "$has_services" = true ] && continue
-		case "$steps" in *'"uses":'* | *docker*) continue ;; esac
+		# An action is opaque: it may need anything the full image carries.
+		[ "$has_uses" = true ] && continue
+		# @tsv doubles every quote and writes newlines as a literal \n, so the trailing-space
+		# boundaries in HEAVY and SLIMGAP only match once both are spaces again.
+		steps=${steps//'\n'/ }
+		steps=${steps//'""'/ }
+		case "$steps" in *docker*) continue ;; esac
 		[[ "$steps" =~ $HEAVY ]] && continue
 		[[ "$steps" =~ $SLIMGAP ]] && continue
 		case "$note" in *ubuntu-slim*) continue ;; esac
