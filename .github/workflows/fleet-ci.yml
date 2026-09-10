@@ -38,6 +38,13 @@ on:
           insights API per scanned package.
         type: boolean
         default: true
+      pin-osv:
+        description: >-
+          Query OSV at the source commit behind every SHA-pinned action and digest-pinned
+          base image. The only gate covering what a workflow executes rather than what a
+          manifest declares; costs one keyless OSV query per pin.
+        type: boolean
+        default: true
       guarddog:
         description: >-
           GuardDog malware heuristics over the tracked tree and referenced actions. Opt-in:
@@ -119,6 +126,40 @@ on:
         default: ""
       vet-exclude:
         description: Paths kept out of the scan, one vet exclusion pattern per line.
+        type: string
+        default: ""
+
+      pin-osv-severity:
+        description: >-
+          Lowest advisory severity that fails the job, cumulative: high covers critical.
+          An OSV record carrying no severity label counts as critical, so an unrated
+          compromise report is never dropped. none gates on malware alone.
+        type: string
+        default: high
+      pin-osv-malware:
+        description: Also fail on a MAL- identifier at a pinned commit.
+        type: boolean
+        default: true
+      pin-osv-actions:
+        description: "Query the commit behind each `uses: owner/repo@<sha>` pin."
+        type: boolean
+        default: true
+      pin-osv-images:
+        description: Query the commit behind each digest-pinned Dockerfile FROM.
+        type: boolean
+        default: true
+      pin-osv-require-attestation:
+        description: >-
+          Fail an image whose build attestation cannot be read, rather than warning that
+          it went unqueried. Off because most published images carry no attestation.
+        type: boolean
+        default: false
+      pin-osv-allow:
+        description: OSV identifiers to waive, one per line.
+        type: string
+        default: ""
+      pin-osv-exclude:
+        description: Pin references kept out of the scan, one glob per line.
         type: string
         default: ""
 
@@ -338,6 +379,18 @@ jobs:
           malware: ${{ inputs.vet-malware }}
           policy: ${{ inputs.vet-policy }}
           exclude: ${{ inputs.vet-exclude }}
+
+      - name: pin-osv
+        if: ${{ inputs.pin-osv && !cancelled() }}
+        uses: $/tools/pin-osv
+        with:
+          severity: ${{ inputs.pin-osv-severity }}
+          malware: ${{ inputs.pin-osv-malware }}
+          actions: ${{ inputs.pin-osv-actions }}
+          images: ${{ inputs.pin-osv-images }}
+          require-attestation: ${{ inputs.pin-osv-require-attestation }}
+          allow: ${{ inputs.pin-osv-allow }}
+          exclude: ${{ inputs.pin-osv-exclude }}
 
       - name: guarddog
         if: ${{ inputs.guarddog && !cancelled() }}
