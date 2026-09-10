@@ -59,6 +59,47 @@ osv_low='{"vulns":[{"id":"GHSA-test-low","database_specific":{"severity":"LOW"}}
 osv_unrated='{"vulns":[{"id":"CVE-2025-00000"}]}'
 osv_malware='{"vulns":[{"id":"MAL-0000-9999"}]}'
 
+# stub_router <name> <commit-body> <package-body> writes a curl that answers by which
+# coordinate the payload carries, so a case can plant a finding in one query only.
+stub_router() {
+	local dir="$TMP/router-$1"
+	mkdir -p "$dir"
+	cat >"$dir/curl" <<EOF
+#!/bin/bash
+case "\$*" in
+*'"commit"'*)
+	cat <<'JSON'
+$2
+JSON
+	;;
+*)
+	cat <<'JSON'
+$3
+JSON
+	;;
+esac
+EOF
+	chmod +x "$dir/curl"
+	printf '%s' "$dir/curl"
+}
+
+# fixture_versioned <name> builds a repo whose single action pin carries the trailing
+# release comment the pinning convention requires, which is where the version comes from.
+fixture_versioned() {
+	local dir="$TMP/$1"
+	mkdir -p "$dir/.github/workflows"
+	cat >"$dir/.github/workflows/ci.yml" <<EOF
+on: push
+jobs:
+  a:
+    steps:
+      - uses: acme/widget@${CLEAN_SHA} # v1.2.3
+EOF
+	git -C "$dir" init -q 2>/dev/null
+	git -C "$dir" add -A 2>/dev/null
+	printf '%s' "$dir"
+}
+
 # fixture <name> builds a git repo holding one action pin and one image pin, so
 # discovery reads an index like it does in CI.
 fixture() {
@@ -170,6 +211,28 @@ run_case "require-attestation true fails it" 1 "no readable build attestation" \
 # An empty body is an outage, not a clean bill of health.
 run_case "an empty OSV response is an error" 1 "returned nothing" \
 	PINOSV_IMAGES=false PINOSV_CURL="$(stub_curl empty "")"
+
+# OSV holds an advisory under a GIT range, under package coordinates, or under one and
+# not the other, so a pin carrying a release comment is asked both ways.
+VREPO=$(fixture_versioned versioned)
+ROUTER=$(stub_router split "$osv_none" "$osv_high")
+
+run_case "a release comment adds a package query" 1 "GHSA-test-high" \
+	PINOSV_ROOT="$VREPO" PINOSV_IMAGES=false PINOSV_CURL="$ROUTER"
+run_case "a pin with no release comment asks by commit alone" 0 "clean at OSV" \
+	PINOSV_IMAGES=false PINOSV_CURL="$ROUTER"
+
+cases=$((cases + 1))
+both=$(stub_router both "$osv_high" "$osv_high")
+out=$(env PINOSV_ROOT="$VREPO" PINOSV_IMAGES=false PINOSV_CURL="$both" bash "$RUN" 2>&1)
+hits=$(printf '%s\n' "$out" | grep -c 'GHSA-test-high')
+if [ "$hits" -eq 1 ]; then
+	echo "ok   an identifier both queries return is reported once"
+else
+	fails=$((fails + 1))
+	echo "FAIL an identifier both queries return is reported once (saw ${hits})"
+	printf '%s\n' "$out" | sed 's/^/     /'
+fi
 
 echo
 echo "${cases} cases, ${fails} failed"

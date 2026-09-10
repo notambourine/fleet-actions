@@ -9,7 +9,7 @@ the actions it references and the base images its Dockerfiles build on.
 
 Both surfaces resolve to a commit, and OSV indexes GIT commit ranges, so one query per
 commit covers the upstream repo whatever it ships: an image, a module, an npm package,
-an action. That is strictly wider than asking about package coordinates.
+an action.
 
 The tj-actions compromise is the worked example:
 
@@ -18,8 +18,24 @@ The tj-actions compromise is the worked example:
 | `{"commit": "a284dc18..."}` | `CVE-2025-30066` |
 | `{"package": {"name": "tj-actions/changed-files", "ecosystem": "GitHub Actions"}}` | `[]` |
 
-The package query misses it. OSV's `GitHub Actions` ecosystem holds reviewed advisories
-keyed `owner/repo`, and this compromise is not one of them.
+`CVE-2025-30066` records `package: null` and a GIT range alone, so nothing keyed on
+package coordinates can match it at any version string.
+
+## Why it also asks by package
+
+Neither coordinate subsumes the other. `GHSA-gq52-6phf-x2r6` is the mirror image: a
+`GitHub Actions` ecosystem record with an ECOSYSTEM range and no GIT range, which a
+commit query cannot reach. An action pin is therefore asked both ways and the
+identifiers are merged.
+
+The version comes from the trailing release comment the pinning convention already
+requires (`@<sha> # v7.0.1`), so the second query costs no extra request. A pin without
+one is asked by commit alone. No OSV ecosystem holds container images, so an image is
+always a commit query alone.
+
+Package queries against the `GitHub Actions` ecosystem currently return nothing for
+every version string tried, which is why the commit query carries the gate today. The
+package query is here so the gate starts working the day that changes.
 
 ## How a pin becomes a commit
 

@@ -95,27 +95,33 @@ waived() {
 	return 1
 }
 
-# Emits `<commit><TAB><label>` for each pin. A label is only ever shown to a human.
+# Emits `<commit><TAB><ref><TAB><package><TAB><version>`. Package coordinates are the
+# second place OSV may hold a record and are empty when the pin carries no version.
 pins() {
 	local files
 	files=$(list_files)
 
 	if [ "$PINOSV_ACTIONS" = true ]; then
-		# `uses:` in a workflow or in a composite action's own steps. A local action
-		# (./ or the $/ the release rewrites) has no upstream commit to query.
+		# A local action (./ or the $/ the release rewrites) has no upstream commit.
+		# The version comes from the trailing release comment, costing no request.
 		printf '%s\n' "$files" |
 			grep -E '(^|/)(\.github/workflows/[^/]+\.ya?ml|action\.ya?ml)$' |
 			while IFS= read -r file; do
-				grep -hoE 'uses:[[:space:]]+[A-Za-z0-9._-]+/[A-Za-z0-9._/-]+@[0-9a-f]{40}' \
+				grep -hoE 'uses:[[:space:]]+[A-Za-z0-9._-]+/[A-Za-z0-9._/-]+@[0-9a-f]{40}([[:space:]]*#[[:space:]]*v?[0-9][0-9A-Za-z.+-]*)?' \
 					"$file" 2>/dev/null
 			done |
 			sed -E 's/^uses:[[:space:]]+//' | sort -u |
-			while IFS= read -r ref; do
-				printf '%s\t%s\n' "${ref##*@}" "$ref"
+			while IFS= read -r line; do
+				ref=$(trim "${line%%#*}")
+				version=""
+				case "$line" in *'#'*) version=$(trim "${line#*#}") ;; esac
+				printf '%s\t%s\t%s\t%s\n' \
+					"${ref##*@}" "$ref" "${ref%@*}" "${version#v}"
 			done
 	fi
 
 	if [ "$PINOSV_IMAGES" = true ]; then
+		# No OSV ecosystem holds container images, so an image is a commit query alone.
 		printf '%s\n' "$files" |
 			grep -E '(^|/)Dockerfile[^/]*$' |
 			while IFS= read -r file; do
@@ -124,7 +130,7 @@ pins() {
 			done |
 			sed -E 's/^FROM[[:space:]]+//' | sort -u |
 			while IFS= read -r ref; do
-				printf 'image\t%s\n' "$ref"
+				printf 'image\t%s\t\t\n' "$ref"
 			done
 	fi
 }
@@ -150,15 +156,14 @@ resolve_image() {
 }
 
 query() {
-	"$PINOSV_CURL" -sS --max-time 30 -X POST "$PINOSV_API" \
-		-d "{\"commit\":\"$1\"}" 2>/dev/null
+	"$PINOSV_CURL" -sS --max-time 30 -X POST "$PINOSV_API" -d "$1" 2>/dev/null
 }
 
 findings=0
 scanned=0
 unresolved=0
 
-while IFS=$'\t' read -r commit ref; do
+while IFS=$'\t' read -r commit ref package version; do
 	[ -n "$ref" ] || continue
 	if excluded "$ref"; then
 		echo "pin-osv: skipping $ref"
@@ -179,13 +184,24 @@ while IFS=$'\t' read -r commit ref; do
 	fi
 
 	if [ "$PINOSV_PLAN_ONLY" = true ]; then
-		echo "plan: query $commit ($ref)"
+		if [ -n "$package" ] && [ -n "$version" ]; then
+			echo "plan: query $commit and $package@$version ($ref)"
+		else
+			echo "plan: query $commit ($ref)"
+		fi
 		continue
 	fi
 
 	scanned=$((scanned + 1))
-	response=$(query "$commit")
+	response=$(query "{\"commit\":\"$commit\"}")
 	[ -n "$response" ] || fail "OSV query for $ref returned nothing"
+
+	# OSV holds an advisory under a GIT range, under package coordinates, or under
+	# one and not the other, so both are asked and the identifiers are merged.
+	if [ -n "$package" ] && [ -n "$version" ]; then
+		response+=$'\n'$(query "$(printf '{"package":{"name":"%s","ecosystem":"GitHub Actions"},"version":"%s"}' \
+			"$package" "$version")")
+	fi
 
 	while IFS=$'\t' read -r id severity; do
 		[ -n "$id" ] || continue
@@ -205,8 +221,8 @@ while IFS=$'\t' read -r commit ref; do
 		[ "$(rank "$severity")" -ge "$THRESHOLD" ] || continue
 		printf '::error::%s carries %s (%s) at %s\n' "$ref" "$id" "${severity:-unrated}" "$commit"
 		findings=$((findings + 1))
-	done < <(jq -r '(.vulns // [])[] | [.id, (.database_specific.severity // "")] | @tsv' \
-		<<<"$response" 2>/dev/null)
+	done < <(jq -rs '[.[] | (.vulns // [])[]] | unique_by(.id)[] |
+		[.id, (.database_specific.severity // "")] | @tsv' <<<"$response" 2>/dev/null)
 done < <(pins)
 
 if [ "$PINOSV_PLAN_ONLY" = true ]; then
