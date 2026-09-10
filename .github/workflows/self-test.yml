@@ -1,6 +1,7 @@
 name: self-test
 
 on:
+  workflow_call:
   pull_request:
   push:
     branches: [main]
@@ -106,19 +107,17 @@ jobs:
           printf '%s' "$OUTPUT" | grep -q permissions || { echo "::error::no permissions finding"; exit 1; }
           printf '%s' "$OUTPUT" | grep -q timeout || { echo "::error::no timeout finding"; exit 1; }
 
-  changes:
-    runs-on: ubuntu-slim
-    timeout-minutes: 5
+  tools:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
-    outputs:
-      tools: ${{ steps.detect.outputs.tools }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - id: detect
+      - name: Run changed tool suites
         env:
           BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
         run: |
@@ -133,32 +132,22 @@ jobs:
               if [ -d "tools/$tool" ] && [ ! -f "tools/$tool/test/ACTION-LEVEL" ]; then
                 printf '%s\n' "$tool"
               fi
-            done |
-            jq -R . | jq -sc .)
-          echo "tools=$TOOLS" >> "$GITHUB_OUTPUT"
-          echo "changed tool suites: $TOOLS"
-
-  tools:
-    needs: changes
-    if: needs.changes.outputs.tools != '[]'
-    runs-on: ubuntu-slim
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        tool: ${{ fromJSON(needs.changes.outputs.tools) }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - name: ${{ matrix.tool }} suite
-        env:
-          TOOL: ${{ matrix.tool }}
-        run: |
-          if [ ! -x "tools/$TOOL/test/run.sh" ]; then
-            echo "::error::tools/$TOOL has no executable test/run.sh"; exit 1
+            done)
+          if [ -z "$TOOLS" ]; then
+            echo "changed tool suites: none"
+            exit 0
           fi
-          "tools/$TOOL/test/run.sh"
+          printf 'changed tool suites:\n%s\n' "$TOOLS"
+          PIDS=()
+          while IFS= read -r tool; do
+            if [ ! -x "tools/$tool/test/run.sh" ]; then
+              echo "::error::tools/$tool has no executable test/run.sh"; exit 1
+            fi
+            "tools/$tool/test/run.sh" &
+            PIDS+=("$!")
+          done <<< "$TOOLS"
+          FAILED=0
+          for pid in "${PIDS[@]}"; do
+            wait "$pid" || FAILED=1
+          done
+          exit "$FAILED"

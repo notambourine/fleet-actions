@@ -1,3 +1,4 @@
+# Suite coverage marker.
 name: actionlint
 description: >-
   Static-check GitHub Actions workflow files with actionlint, ShellCheck, and pyflakes

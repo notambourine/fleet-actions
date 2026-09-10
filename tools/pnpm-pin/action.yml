@@ -1,3 +1,4 @@
+# Suite coverage marker.
 name: pnpm-pin
 description: Assert the root package.json pins an exact packageManager version.
 branding:

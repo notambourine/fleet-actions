@@ -49,8 +49,7 @@ on:
         default: false
       runner-tier:
         description: >-
-          Find ubuntu-latest jobs that can use ubuntu-slim. Disabled by default because this is
-          a cost heuristic.
+          Suggest clear ubuntu-slim cost savings in private repositories. Never fails the job.
         type: boolean
         default: false
 
@@ -209,8 +208,7 @@ on:
         default: suspicious
 
       runner-tier-exclude:
-        description: >-
-          Excluded job-key globs, one per line. Use an ubuntu-slim comment for a single job.
+        description: Job-key globs omitted from runner-tier suggestions, one per line.
         type: string
         default: ""
 

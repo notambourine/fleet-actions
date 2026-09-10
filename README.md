@@ -25,8 +25,8 @@ jobs:
     # guarddog and runner-tier default to false. Other checks default to true.
     # with:
     #   guarddog: true
-    #   runner-tier: true # Find ubuntu-latest jobs that can use ubuntu-slim.
-    #   runner-tier-exclude: | # Job-key globs. Use an ubuntu-slim comment for one job.
+    #   runner-tier: true # Suggest clear ubuntu-slim cost savings in private repos.
+    #   runner-tier-exclude: | # Job-key globs to omit from suggestions.
     #     e2e-*
     #   scan-mode: git # betterleaks scans the full history.
     #   wormhook-mode: deep # Includes tracked node_modules when present.
@@ -68,10 +68,9 @@ Relax either through the inputs above rather than by disabling `actionlint`.
 
 ## Runner tier
 
-`runner-tier` finds `ubuntu-latest` jobs that can use `ubuntu-slim`. It excludes jobs that use
-containers, services, harden-runner, Docker, install or build commands, tools absent from slim,
-or timeouts outside slim's 15-minute limit. Waive one job with an `ubuntu-slim` comment on
-`runs-on`, or exclude job-key globs with `runner-tier-exclude`.
+`runner-tier` suggests `ubuntu-slim` only for clearly lightweight jobs in private repositories.
+Suggestions are notices and never fail CI. It stays silent for public repositories, local
+actions, concurrent work, builds, installs, services, containers, and jobs over five minutes.
 
 Every check except `guarddog` and `runner-tier` is enabled by default. The workflow reports one check named
 `<workflow name> / <calling job>`, so these two names are load-bearing: the
@@ -142,7 +141,7 @@ The two `false` values avoid repeating the fleet scan. Keep wormhook enabled in
 | `tools/guarddog` | Malware heuristics over the tracked tree and referenced actions. |
 | `tools/pin-osv` | OSV advisories and malware at the commit behind each action and image pin. |
 | `tools/pnpm-pin` | Exact `packageManager` version. |
-| `tools/runner-tier` | An `ubuntu-latest` job that needs nothing `ubuntu-slim` lacks. |
+| `tools/runner-tier` | Conservative `ubuntu-slim` cost suggestions for private repositories. |
 | `tools/tripwire` | Supply-chain persistence indicators. |
 
 Script-backed tool suites live in `tools/<name>/test/run.sh`. Pull requests run

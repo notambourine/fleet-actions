@@ -1,11 +1,10 @@
 # runner-tier
 
-Find `ubuntu-latest` jobs that can use `ubuntu-slim`. The check reads workflow files offline.
+Suggest `ubuntu-slim` for clearly lightweight `ubuntu-latest` jobs in private repositories.
+Suggestions are notices and never fail CI. The check reads workflow files offline.
 
-`ubuntu-slim` costs $0.002/minute; `ubuntu-latest` costs $0.006/minute. Slim has 1 CPU, 5 GB RAM,
-14 GB disk, an unprivileged container, a minimal image, and a 15-minute limit.
-
-Enable it with the `runner-tier` input. It is disabled by default because it is a cost heuristic.
+Slim costs $0.002/minute versus $0.006/minute for the standard private-repository Linux runner.
+Public repositories have no billed Linux runner savings, so the action stays silent there.
 
 ## Exclusions
 
@@ -14,29 +13,18 @@ The check excludes jobs with any of these conditions.
 | Condition | Reason |
 | --- | --- |
 | `container:` or `services:` | slim is already a container and runs unprivileged |
-| a `step-security/harden-runner` step | the egress monitor cannot load unprivileged |
-| docker: the literal in a step, a `docker://` action, or an in-tree `uses: ./x` (or `$/x`) whose `action.yml` is `runs.using: docker` | no Docker-in-Docker |
+| any action step, external script, or concurrent shell work | the workflow does not expose its resource needs |
+| Docker | slim has no Docker-in-Docker |
 | an install-or-build command (`npm ci`, `uv sync`, `cargo build`, a `setup-*`, …) | slim has 1 CPU and a minimal image |
 | a tool `ubuntu-latest` preinstalls and slim does not (`envsubst`, a browser, `ffmpeg`, `kubectl`, …) | the step fails on a missing binary |
-| `timeout-minutes` absent, non-numeric, or above 15 | slim terminates jobs at 15 minutes |
+| `timeout-minutes` absent, non-numeric, or above 5 | the saving is not clear enough to recommend |
 | a job-level `uses:` | reusable workflow calls have no runner |
 
-The tool list covers known gaps, not all slim software. The check cannot inspect commands inside
-repository scripts. Slim has no UTF-8 locale; test locale-sensitive jobs with `LC_ALL=C LANG=C`.
+The tool list covers known gaps, not all slim software. Silence means keep the standard runner.
 
-## Waivers
+## Suppressions
 
-Add a comment containing `ubuntu-slim` above or on `runs-on`:
-
-```yaml
-jobs:
-  e2e:
-    # ubuntu-slim lacks Playwright browsers.
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-```
-
-For multiple jobs, pass job-key globs to `runner-tier-exclude`, one per line:
+Pass job-key globs to `runner-tier-exclude`, one per line:
 
 ```yaml
 with:
@@ -51,8 +39,10 @@ with:
 bash /path/to/tools/runner-tier/scripts/check-runner-tier.sh
 ```
 
-`RUNNER_TIER_FILES` and `RUNNER_TIER_EXCLUDE` set the inputs. Requires `yq` (mikefarah v4).
-Exit codes: 0 clean, 1 findings, 2 scan error.
+`RUNNER_TIER_FILES` and `RUNNER_TIER_EXCLUDE` set the inputs. Local scans assume a private
+repository; set `RUNNER_TIER_PRIVATE=false` to skip suggestions. Requires `yq` (mikefarah v4).
+Exit codes: 0 no suggestions, 1 suggestions, 2 scan error. The action converts suggestions to a
+successful notice; direct script callers can distinguish them.
 
 ## Tests
 

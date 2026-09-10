@@ -1,3 +1,4 @@
+# Suite coverage marker.
 name: pin-osv
 description: >-
   Check action and base-image source commits for OSV advisories and malware.

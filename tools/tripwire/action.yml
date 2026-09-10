@@ -1,3 +1,4 @@
+# Suite coverage marker.
 name: tripwire
 description: >-
   Fail-fast scan for Shai-Hulud / Mini Shai-Hulud npm-worm persistence IOCs:

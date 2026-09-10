@@ -1,3 +1,4 @@
+# Suite coverage marker.
 name: guarddog
 description: >-
   Scan tracked files and referenced actions with a hash-pinned GuardDog install.
