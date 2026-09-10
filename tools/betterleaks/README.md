@@ -1,29 +1,24 @@
 # betterleaks
 
-Secret scan over commit history or the worktree, from a cosign-verified,
-sha256-checked release. Absorbed from `betterleaks-action`.
+Secret scan over commit history or the worktree, from a digest-pinned image.
+Absorbed from `betterleaks-action`.
 
 Callers reach this through `fleet-ci.yml`'s `betterleaks` input, plus `scan-mode` and
 the `betterleaks-*` inputs. See the repo README for that table.
 
-## Why the verification chain is two stages
+## Why the image is the pin
 
-`cosign verify-blob` checks `checksums.txt` against the sigstore bundle, asserting the
-file came from `betterleaks/betterleaks`' own release workflow at the matching tag.
-`sha256sum -c` then checks the tarball against that verified manifest. cosign is never
-piped: a pipe would let a verify failure reach the scan step on an unverified binary if
-`pipefail` were ever lost.
+Upstream ships release tarballs and a `ghcr.io/betterleaks/betterleaks` image. Only the
+image carries a reference Dependabot rewrites, so the digest in `Dockerfile` is the pin
+and the bump arrives as a reviewable PR. That replaces a run-time `gh release view`,
+a cosign signature check, and a sha256 manifest check with a digest the runner enforces
+before the container starts.
 
-The tarball unpacks under `RUNNER_TEMP`, not the workspace. A compressed Go binary is
-exactly the entropy a secret scanner flags, and the scan walks the workspace.
+The cost is a frozen ruleset: a rule published upstream today does not fail a PR today.
+It fails one once the Dependabot bump lands.
 
-## Why the version floats
-
-`version: latest` resolves the newest betterleaks release each run, because a frozen
-ruleset is the thing `latest` exists to avoid. The cost is that one upstream release
-with a new rule can turn the whole fleet red at once with no code change anywhere.
-`betterleaks-version` is the escape hatch: pin an exact version, land the fix, float
-again. `self-test.yml`'s `betterleaks-pinned-version` job keeps that path working.
+Docker container actions are Linux-only, so the action no longer runs on macOS or
+Windows runners.
 
 ## Scan modes
 
@@ -39,9 +34,7 @@ Validation stays off, so no candidate secret is ever sent to a vendor API, and
 
 ## Tests
 
-There is no `test/run.sh` here, and `test/ACTION-LEVEL` records why so `self-test.yml`'s
-discovery skips this directory instead of failing on it. Both real cases assert behavior
-that exists only through `uses:` (`betterleaks-self-scan` dogfoods the action against
-this repo; `betterleaks-pinned-version` asserts a step *output*), so they live as named
-jobs in `self-test.yml` alongside a job that extracts every `run:` block with `yq` and
-runs ShellCheck over it. The action's whole product is embedded bash.
+`test/run.sh` drives `scripts/run-betterleaks.sh` in plan mode for validation and
+argument assembly, and through a stub binary for the pass and fail exits. `self-test.yml`'s
+`betterleaks-self-scan` job dogfoods the built action against this repo, which is the
+only case that exercises the image itself.

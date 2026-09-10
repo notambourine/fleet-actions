@@ -61,12 +61,6 @@ on:
         description: Checkout depth. betterleaks git needs the full history.
         type: number
         default: 0
-      betterleaks-version:
-        description: >-
-          betterleaks release to run, "latest" or an exact version like 1.8.1. Keep latest
-          unless an upstream rule turns the fleet red; a frozen ruleset is what latest avoids.
-        type: string
-        default: latest
       betterleaks-path:
         description: Path to scan. Empty scans the workspace root.
         type: string
@@ -235,7 +229,6 @@ jobs:
         if: ${{ inputs.betterleaks && !cancelled() }}
         uses: $/tools/betterleaks
         with:
-          version: ${{ inputs.betterleaks-version }}
           scan: ${{ inputs.scan-mode }}
           path: ${{ inputs.betterleaks-path }}
           log-opts: ${{ inputs.betterleaks-log-opts }}

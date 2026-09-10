@@ -31,48 +31,6 @@ jobs:
           persist-credentials: false
       - uses: ./tools/betterleaks
 
-  betterleaks-pinned-version:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - id: scan
-        uses: ./tools/betterleaks
-        with:
-          version: "1.8.0"
-          scan: dir
-      - name: Assert the requested release ran
-        env:
-          RESOLVED: ${{ steps.scan.outputs.version }}
-        run: |
-          [ "$RESOLVED" = v1.8.0 ] || { echo "::error::ran $RESOLVED, expected v1.8.0"; exit 1; }
-
-  betterleaks-shellcheck:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: ShellCheck the composite steps
-        run: |
-          n=$(yq '[.runs.steps[] | select(has("run"))] | length' tools/betterleaks/action.yml)
-          for i in $(seq 0 $((n - 1))); do
-            {
-              echo '#!/usr/bin/env bash'
-              echo '# shellcheck disable=SC2154'
-              yq "[.runs.steps[] | select(has(\"run\"))][$i].run" tools/betterleaks/action.yml
-            } > "${RUNNER_TEMP}/step-$i.sh"
-            shellcheck -s bash "${RUNNER_TEMP}/step-$i.sh"
-          done
-          echo "shellcheck clean across $n run blocks"
-
   actionlint-planted:
     runs-on: ubuntu-latest
     timeout-minutes: 5
