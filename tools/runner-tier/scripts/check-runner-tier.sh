@@ -1,28 +1,5 @@
 #!/usr/bin/env bash
-#
-# runner-tier: fail a job that asks for ubuntu-latest and needs nothing it provides.
-#
-# ubuntu-slim bills $0.002/min against ubuntu-latest's $0.006, and GitHub rounds every job up
-# to a whole minute, so a gate finishing inside its first minute is a straight 3x. Slim is
-# 1 CPU, 5 GB RAM, 14 GB disk, an unprivileged container, a minimal image, and a HARD 15-minute
-# kill. The tier pays off up to 3x slower, which covers a gate that downloads a binary and
-# reads files, and loses on anything that resolves a dependency tree or compiles.
-#
-# Seven disqualifiers, all read from the workflow offline. A job carrying any of them is left
-# alone; a job carrying none is a finding:
-#   - `container:` or `services:` - slim is already a container and runs unprivileged.
-#   - `step-security/harden-runner` - the egress monitor cannot load unprivileged. A job is
-#     slim OR hardened, never both.
-#   - docker: the literal in a step, a `docker://` action, or an in-tree `uses: ./x` (or the
-#     same-repository `$/x` form) whose action.yml is `runs.using: docker`. No Docker-in-Docker.
-#   - an install-or-build command. This weight proxy is what keeps the gate honest: 1 CPU and a
-#     minimal image is exactly where the 3x goes away.
-#   - a tool ubuntu-latest preinstalls and slim does not. A DENYLIST of known gaps, never
-#     slim's full software list, so read the job before flipping it.
-#   - `timeout-minutes` absent, non-numeric, or above 15 - slim terminates the job at 15.
-#   - a comment naming `ubuntu-slim` on the job's `runs-on` - a decision already made.
-#
-# Exit 0 clean, 1 findings, 2 the scan could not run.
+# Exit 0 clean, 1 findings, 2 scan error.
 set -uo pipefail
 
 FILES=${RUNNER_TIER_FILES:-}
@@ -30,10 +7,8 @@ EXCLUDE=${RUNNER_TIER_EXCLUDE:-}
 
 TOP=$(git rev-parse --show-toplevel 2>/dev/null) || TOP="${GITHUB_WORKSPACE:-$PWD}"
 
-# yq (mikefarah v4), not grep: every disqualifier nests under a job key, and grep cannot
-# attribute one to the right job.
 if ! command -v yq >/dev/null 2>&1; then
-	echo "::error::runner-tier needs yq (mikefarah v4) on the runner"
+	echo "::error::runner-tier requires yq (mikefarah v4)"
 	exit 2
 fi
 
@@ -128,10 +103,8 @@ for f in "${wf[@]}"; do
 
 	while IFS=$'\t' read -r job runson is_reusable has_container has_services tmo line steps note; do
 		[ -n "$job" ] || continue
-		# A reusable-workflow call has no runner of its own; the tier lives in the callee.
 		[ "$is_reusable" = true ] && continue
-		# Only x64 ubuntu-latest is in scope. A matrix expression, arm64, macOS, Windows, a
-		# larger runner, or an already-slim job is someone else's decision.
+		# Expressions and other runner labels are out of scope.
 		[ "$runson" = ubuntu-latest ] || continue
 		total=$((total + 1))
 		[ "$has_container" = true ] || [ "$has_services" = true ] && continue
@@ -140,14 +113,12 @@ for f in "${wf[@]}"; do
 		[[ "$steps" =~ $HEAVY ]] && continue
 		[[ "$steps" =~ $SLIMGAP ]] && continue
 		case "$note" in *ubuntu-slim*) continue ;; esac
-		# Absent, an expression, or over 15: slim kills the job at 15, so recommending it
-		# for a job with no readable bound is advice that breaks the job.
 		case "$tmo" in '' | 0 | *[!0-9]*) continue ;; esac
 		[ "$tmo" -gt 15 ] && continue
 		excluded "$job" && continue
 
 		found=$((found + 1))
-		echo "::error file=${rel},line=${line}::job '${job}' needs nothing ubuntu-latest provides; move it to ubuntu-slim, or write the reason as a comment naming ubuntu-slim on runs-on"
+		echo "::error file=${rel},line=${line}::job '${job}' can use ubuntu-slim; change runs-on or add an ubuntu-slim waiver comment"
 	done <<<"$rows"
 done
 
@@ -156,7 +127,7 @@ if [ "$total" -eq 0 ]; then
 	exit 0
 fi
 if [ "$found" -eq 0 ]; then
-	echo "runner-tier: all ${total} ubuntu-latest job(s) need that tier"
+	echo "runner-tier: ${total} ubuntu-latest job(s) require that runner"
 	exit 0
 fi
 echo "runner-tier: ${found} of ${total} ubuntu-latest job(s) could run on ubuntu-slim"

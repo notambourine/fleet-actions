@@ -1,7 +1,6 @@
 name: pin-osv
 description: >-
-  Resolve every SHA-pinned action and digest-pinned base image to its source commit and
-  fail the job when OSV reports an advisory or malware there.
+  Check action and base-image source commits for OSV advisories and malware.
 author: NoTambourine LLC
 branding:
   icon: git-commit
@@ -10,9 +9,7 @@ branding:
 inputs:
   severity:
     description: >-
-      Lowest advisory severity that fails the job, cumulative: high covers critical.
-      An OSV record with no severity label counts as critical, so an unrated
-      compromise report is never dropped. none gates on malware alone.
+      Minimum advisory severity. Unrated records count as critical. none checks malware only.
     default: high
   malware:
     description: Also fail on a MAL- identifier at the pinned commit.
@@ -25,9 +22,7 @@ inputs:
     default: "true"
   require-attestation:
     description: >-
-      Fail an image whose build attestation cannot be read, rather than warning that it
-      went unqueried. Off because most published images carry no attestation, so an
-      unresolved image is a coverage gap to report, not a finding against the pin.
+      Fail when an image build attestation cannot be read. Otherwise emit a warning.
     default: "false"
   allow:
     description: OSV identifiers to waive, one per line.

@@ -1,17 +1,4 @@
 #!/usr/bin/env bash
-# Query OSV at the source commit behind every pin this repo holds.
-#
-# A manifest scanner reads declared dependencies. Nothing reads the two surfaces a
-# workflow actually executes: the actions it references and the base images its
-# Dockerfiles build on. Both are pinned to an immutable artifact, and both resolve to
-# a commit:
-#
-#   uses: owner/repo@<40-hex>   the pin is already the commit
-#   FROM host/owner/repo@sha256 the build attestation names the commit
-#
-# OSV indexes GIT commit ranges, so one query per commit covers the repo whatever it
-# ships. That is strictly wider than a package query: the tj-actions compromise is a
-# hit by commit and a miss by GitHub Actions package coordinates.
 set -uo pipefail
 
 PINOSV_ROOT="${PINOSV_ROOT:-${GITHUB_WORKSPACE:-$PWD}}"
@@ -38,8 +25,7 @@ trim() {
 	printf '%s' "${s%"${s##*[![:space:]]}"}"
 }
 
-# Unknown outranks the threshold rather than dropping out of it: OSV leaves the label
-# null on CVE- and GO- records, and the tj-actions compromise is one of them.
+# OSV omits severity on some CVE and GO records.
 rank() {
 	case "$1" in
 	CRITICAL) printf 4 ;;
@@ -102,8 +88,7 @@ pins() {
 	files=$(list_files)
 
 	if [ "$PINOSV_ACTIONS" = true ]; then
-		# A local action (./ or the $/ the release rewrites) has no upstream commit.
-		# The version comes from the trailing release comment, costing no request.
+		# The release comment supplies the package-query version.
 		printf '%s\n' "$files" |
 			grep -E '(^|/)(\.github/workflows/[^/]+\.ya?ml|action\.ya?ml)$' |
 			while IFS= read -r file; do
@@ -124,7 +109,6 @@ pins() {
 	fi
 
 	if [ "$PINOSV_IMAGES" = true ]; then
-		# No OSV ecosystem holds container images, so an image is a commit query alone.
 		printf '%s\n' "$files" |
 			grep -E '(^|/)Dockerfile[^/]*$' |
 			while IFS= read -r file; do
@@ -138,8 +122,6 @@ pins() {
 	fi
 }
 
-# An image pin names a digest, not a commit. The build attestation is what carries the
-# commit, so an image whose provenance cannot be read is unresolved, never clean.
 resolve_image() {
 	local ref="$1" path digest owner repo commit
 	path="${ref%@*}"
@@ -163,8 +145,7 @@ query() {
 	while :; do
 		page=$("$PINOSV_CURL" --fail -sS --max-time 30 -X POST "$PINOSV_API" -d "$payload") || return 1
 		[ -n "$page" ] || { echo 'OSV returned nothing' >&2; return 1; }
-		# OSV omits vulns for a clean result, so only the error envelope is rejected:
-		# v1 may add fields, and an allowlist would turn that into a fleet-wide outage.
+			# Permit new v1 fields but reject error envelopes and malformed known fields.
 		jq -es 'length == 1 and (.[0] | type == "object" and
 			((has("code") or has("message") or has("error")) | not) and
 			((has("vulns") | not) or (.vulns | type == "array" and all(.[];
@@ -195,10 +176,10 @@ while IFS=$'\t' read -r commit ref package version; do
 		if ! commit=$(resolve_image "$ref"); then
 			unresolved=$((unresolved + 1))
 			if [ "$PINOSV_REQUIRE_ATTESTATION" = true ]; then
-				printf '::error::%s has no readable build attestation, so its source commit cannot be queried\n' "$ref"
+					printf '::error::%s: build attestation unavailable; source commit not queried\n' "$ref"
 				findings=$((findings + 1))
 			else
-				printf '::warning::%s has no readable build attestation; not queried\n' "$ref"
+					printf '::warning::%s: build attestation unavailable; source commit not queried\n' "$ref"
 			fi
 			continue
 		fi
@@ -216,8 +197,7 @@ while IFS=$'\t' read -r commit ref package version; do
 	scanned=$((scanned + 1))
 	response=$(query "{\"commit\":\"$commit\"}") || fail "OSV commit query failed for $ref"
 
-	# OSV holds an advisory under a GIT range, under package coordinates, or under
-	# one and not the other, so both are asked and the identifiers are merged.
+	# OSV records may use either coordinate.
 	if [ -n "$package" ] && [ -n "$version" ]; then
 		package_response=$(query "$(printf '{"package":{"name":"%s","ecosystem":"GitHub Actions"},"version":"%s"}' \
 			"$package" "$version")") || fail "OSV package query failed for $ref"
@@ -243,7 +223,7 @@ while IFS=$'\t' read -r commit ref package version; do
 		esac
 		[ "$THRESHOLD" -gt 0 ] || continue
 		[ "$(rank "$severity")" -ge "$THRESHOLD" ] || continue
-		printf '::error::%s carries %s (%s) at %s\n' "$ref" "$id" "${severity:-unrated}" "$commit"
+		printf '::error::%s: %s (%s) at %s\n' "$ref" "$id" "${severity:-unrated}" "$commit"
 		findings=$((findings + 1))
 	done <<<"$advisories"
 done < <(pins)

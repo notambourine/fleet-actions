@@ -1,75 +1,47 @@
 # pin-osv
 
-Fail CI when [OSV](https://osv.dev) reports an advisory or malware at the source commit
-behind a pin this repo executes. Every other dependency gate in the fleet reads declared
-dependencies out of a manifest. Nothing reads the two surfaces a workflow actually runs:
-the actions it references and the base images its Dockerfiles build on.
+Check the source commits behind pinned actions and base images against [OSV](https://osv.dev).
 
-## Why the query is a commit
+## Queries
 
-Both surfaces resolve to a commit, and OSV indexes GIT commit ranges, so one query per
-commit covers the upstream repo whatever it ships: an image, a module, an npm package,
-an action.
+OSV indexes GIT commit ranges. Action SHAs and image build attestations provide commits.
 
-The tj-actions compromise is the worked example:
+For CVE-2025-30066:
 
 | Query | Result |
 | --- | --- |
 | `{"commit": "a284dc18..."}` | `CVE-2025-30066` |
 | `{"package": {"name": "tj-actions/changed-files", "ecosystem": "GitHub Actions"}}` | `[]` |
 
-`CVE-2025-30066` records `package: null` and a GIT range alone, so nothing keyed on
-package coordinates can match it at any version string.
+The record has a GIT range and no package coordinate, so only the commit query matches.
 
-## Why it also asks by package
+`GHSA-gq52-6phf-x2r6` has an ECOSYSTEM range and no GIT range. Actions are queried by both
+commit and package coordinate. Results are deduplicated by identifier.
 
-Neither coordinate subsumes the other. `GHSA-gq52-6phf-x2r6` is the mirror image: a
-`GitHub Actions` ecosystem record with an ECOSYSTEM range and no GIT range, which a
-commit query cannot reach. An action pin is therefore asked both ways and the
-identifiers are merged.
+The package version comes from the release comment (`@<sha> # v7.0.1`). Pins without a release
+comment and container images are queried by commit only.
 
-The version comes from the trailing release comment the pinning convention already
-requires (`@<sha> # v7.0.1`), so no tag lookup is needed. A pin without
-one is asked by commit alone. No OSV ecosystem holds container images, so an image is
-always a commit query alone.
-
-Package queries against the `GitHub Actions` ecosystem currently return nothing for
-every version string tried, which is why the commit query carries the gate today. The
-package query is here so the gate starts working the day that changes.
-
-## How a pin becomes a commit
+## Commit resolution
 
 | Pin | Source of the commit |
 | --- | --- |
 | `uses: owner/repo@<40-hex>` | the pin already is the commit |
 | `FROM host/owner/repo@sha256:...` | the image's build attestation names it |
 
-An image whose attestation cannot be read is **unresolved**, never clean. It is reported
-either way; `require-attestation` decides whether it also fails the job. That input is
-off by default because most published images carry no attestation, which makes an
-unresolved image a coverage gap to report rather than a finding against the pin.
+An unreadable image attestation is unresolved. It emits a warning by default;
+`require-attestation` makes it an error.
 
-A local action (`./tools/...`, or the `$/` the release rewrites) has no upstream commit
-and is skipped.
+Local actions (`./tools/...` and `$/...`) are skipped.
 
 ## Severity
 
-Cumulative, so `high` covers critical. **A record with no severity label counts as
-critical.** OSV leaves the label null on `CVE-` and `GO-` records, and CVE-2025-30066 is
-one of them, so a threshold that dropped unrated records would miss the exact class of
-event this gate exists for.
+Thresholds are cumulative. Unrated records count as critical because OSV omits severity on some
+`CVE-` and `GO-` records, including CVE-2025-30066.
 
-`MAL-` identifiers are their own decision, gated by `malware` rather than by severity,
-so `severity: none` still fails on malware alone.
+The `malware` input controls `MAL-` identifiers independently. `severity: none` checks only malware.
 
 ## What it does not cover
 
-The resolver reads attestations from GitHub's repository API without independently
-verifying their signatures. It trusts GitHub's upload authorization and the publishing
-repository's provenance claim; it does not establish build reproducibility.
-A maintainer whose account is compromised can poison the release
-workflow and produce a valid attestation over poisoned output. Cooldown in
-`dependabot.yml` and reading the release diff remain the answer there.
-
-OSV is also a reporting feed: a compromise nobody has published yet is a clean query.
-This gate raises the floor, it does not close the window.
+The resolver does not verify attestation signatures or build reproducibility. It trusts GitHub's
+upload authorization and the publisher's provenance claim. OSV queries cannot detect unpublished
+compromises.

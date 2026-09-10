@@ -1,12 +1,2 @@
-This tool is a Docker action with no script of its own, so a test/run.sh has nothing
-to call and self-test.yml's discovery skips it.
-
-Covered instead by these named jobs in .github/workflows/self-test.yml:
-
-  fleet-ci            clean case: the fleet workflow lints this repo through tools/actionlint
-  actionlint-planted  planted positive: a workflow with a known error must fail the action
-
-Both need a Docker daemon, which the ubuntu-slim tools matrix does not have.
-
-Deleting this file makes the tools matrix demand a test/run.sh again, which is the
-intended behavior for every tool that does not have this exemption in writing.
+fleet-ci
+actionlint-planted

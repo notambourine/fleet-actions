@@ -1,8 +1,4 @@
 #!/bin/bash
-# Behavior tests for scripts/run-guarddog.sh. Detection and argument assembly run in
-# plan mode, so no case reaches a registry. The pass and fail paths use a stub guarddog
-# on PATH: the real one downloads packages, and the planted finding has to be a finding
-# this suite controls.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -14,7 +10,6 @@ trap 'rm -rf "$TMP"' EXIT
 fails=0
 cases=0
 
-# stub <issues> [score] [label] writes a guarddog result, exiting as upstream does.
 stub() {
 	local issues="$1" score="${2:-}" label="${3:-}" dir
 	if [ -z "$score" ]; then
@@ -36,8 +31,6 @@ EOF
 	printf '%s' "$dir"
 }
 
-# fixture <name> <file>... builds a git repo holding those files, so detection reads an
-# index like it does in CI.
 fixture() {
 	local dir="$TMP/$1" f
 	shift
@@ -51,7 +44,6 @@ fixture() {
 	printf '%s' "$dir"
 }
 
-# run_case <name> <root> <want-rc> <output-substring> [VAR=value ...]
 run_case() {
 	local name="$1" root="$2" want_rc="$3" want_out="$4" out rc ok=1
 	shift 4
@@ -69,7 +61,6 @@ run_case() {
 	fi
 }
 
-# refute_case <name> <root> <substring-that-must-be-absent> [VAR=value ...]
 refute_case() {
 	local name="$1" root="$2" reject="$3" out
 	shift 3
@@ -92,91 +83,84 @@ poly=$(fixture poly package.json requirements.txt go.mod Cargo.lock Gemfile.lock
 nested=$(fixture nested packages/web/package.json services/api/pyproject.toml)
 mixed=$(fixture mixed package.json .github/workflows/ci.yml dist/bundle.min.js)
 
-run_case "no manifest and no workflow is not a finding" "$empty" 0 "nothing to scan"
+run_case "accepts no targets" "$empty" 0 "nothing to scan"
 
-# Default posture: offline local scan plus the workflow gate, no registry traffic.
-run_case "package.json selects a local npm scan" "$npm" 0 "plan: guarddog npm scan"
-run_case "the local scan is offline, never verify" "$npm" 0 "npm scan --exit-non-zero-on-finding"
-refute_case "registry verify is off by default" "$npm" "npm verify"
-run_case "workflows are verified by default" "$wf" 0 \
+run_case "detects npm" "$npm" 0 "plan: guarddog npm scan"
+run_case "uses local scan" "$npm" 0 "npm scan --exit-non-zero-on-finding"
+refute_case "disables registry verify by default" "$npm" "npm verify"
+run_case "verifies workflows by default" "$wf" 0 \
 	"github_action verify --exit-non-zero-on-finding --output-format json .github/workflows/ci.yml"
-run_case "every workflow is a target" "$wf" 0 ".github/workflows/release.yaml"
+run_case "targets every workflow" "$wf" 0 ".github/workflows/release.yaml"
 
-# json is what makes --exit-non-zero-on-finding fire upstream.
-run_case "every invocation asks for json" "$npm" 0 "--output-format json"
+run_case "requests JSON" "$npm" 0 "--output-format json"
 
-run_case "a nested manifest counts" "$nested" 0 "guarddog npm scan" GD_ECOSYSTEMS=npm
-run_case "pyproject.toml selects pypi" "$nested" 0 "guarddog pypi scan" GD_ECOSYSTEMS=pypi
-run_case "go.mod selects go" "$poly" 0 "guarddog go scan"
-run_case "Cargo.lock selects crates" "$poly" 0 "guarddog crates scan"
-run_case "Gemfile.lock selects rubygems" "$poly" 0 "guarddog rubygems scan"
-run_case "one scan per ecosystem, not per manifest" "$nested" 0 "1 target(s)" \
+run_case "detects nested manifest" "$nested" 0 "guarddog npm scan" GD_ECOSYSTEMS=npm
+run_case "detects pypi" "$nested" 0 "guarddog pypi scan" GD_ECOSYSTEMS=pypi
+run_case "detects go" "$poly" 0 "guarddog go scan"
+run_case "detects crates" "$poly" 0 "guarddog crates scan"
+run_case "detects rubygems" "$poly" 0 "guarddog rubygems scan"
+run_case "deduplicates ecosystem scans" "$nested" 0 "1 target(s)" \
 	GD_ECOSYSTEMS=npm GD_ACTIONS=false
-run_case "explicit ecosystem list narrows the scan" "$poly" 0 "guarddog npm scan" GD_ECOSYSTEMS=npm
-refute_case "explicit ecosystem list excludes the rest" "$poly" "guarddog go scan" GD_ECOSYSTEMS=npm
-run_case "comma-separated list is accepted" "$poly" 0 "guarddog crates scan" GD_ECOSYSTEMS=npm,crates
-run_case "unknown ecosystem fails" "$poly" 1 "unknown ecosystem" GD_ECOSYSTEMS=cocoapods
+run_case "selects ecosystem" "$poly" 0 "guarddog npm scan" GD_ECOSYSTEMS=npm
+refute_case "excludes unselected ecosystem" "$poly" "guarddog go scan" GD_ECOSYSTEMS=npm
+run_case "accepts ecosystem list" "$poly" 0 "guarddog crates scan" GD_ECOSYSTEMS=npm,crates
+run_case "rejects unknown ecosystem" "$poly" 1 "unknown ecosystem" GD_ECOSYSTEMS=cocoapods
 
-run_case "local scan can be turned off" "$mixed" 0 "github_action verify" GD_LOCAL_SCAN=false
-refute_case "turning off the local scan drops it" "$mixed" "npm scan" GD_LOCAL_SCAN=false
-run_case "actions gate can be turned off" "$mixed" 0 "npm scan" GD_ACTIONS=false
-refute_case "turning off the actions gate drops it" "$mixed" "github_action" GD_ACTIONS=false
-run_case "registry verify is opt-in" "$poly" 0 \
+run_case "disables local scan" "$mixed" 0 "github_action verify" GD_LOCAL_SCAN=false
+refute_case "omits disabled local scan" "$mixed" "npm scan" GD_LOCAL_SCAN=false
+run_case "disables action scan" "$mixed" 0 "npm scan" GD_ACTIONS=false
+refute_case "omits disabled action scan" "$mixed" "github_action" GD_ACTIONS=false
+run_case "enables registry verify" "$poly" 0 \
 	"guarddog npm verify --exit-non-zero-on-finding" GD_REGISTRY_VERIFY=true
-run_case "registry verify reads every manifest" "$nested" 0 \
+run_case "verifies every manifest" "$nested" 0 \
 	"verify --exit-non-zero-on-finding --output-format json packages/web/package.json" \
 	GD_REGISTRY_VERIFY=true GD_ECOSYSTEMS=npm
-run_case "include-dev-dependencies reaches npm verify" "$npm" 0 \
+run_case "includes npm dev dependencies" "$npm" 0 \
 	"--include-dev-dependencies" GD_REGISTRY_VERIFY=true GD_INCLUDE_DEV=true
-refute_case "include-dev-dependencies stays off a local scan" "$npm" \
+refute_case "omits dev flag from local scan" "$npm" \
 	"scan --exit-non-zero-on-finding --output-format json --include-dev-dependencies" \
 	GD_INCLUDE_DEV=true
 
-# scan-paths is the chained post-install case: node_modules is untracked, so nothing
-# else in this script can see it.
 installed=$(fixture installed package.json)
 mkdir -p "$installed/node_modules/left-pad"
 printf '{"name":"left-pad"}\n' >"$installed/node_modules/left-pad/package.json"
 
-run_case "scan-paths reaches an untracked directory" "$installed" 0 \
+run_case "scans untracked path" "$installed" 0 \
 	"npm scan --exit-non-zero-on-finding --output-format json node_modules" \
 	GD_ACTIONS=false GD_LOCAL_SCAN=false GD_SCAN_PATHS="npm:node_modules"
-run_case "a bare scan-path runs every selected ecosystem" "$installed" 0 \
+run_case "uses all ecosystems for bare path" "$installed" 0 \
 	"guarddog pypi scan --exit-non-zero-on-finding --output-format json node_modules" \
 	GD_ACTIONS=false GD_LOCAL_SCAN=false GD_SCAN_PATHS="node_modules"
-run_case "a scoped scan-path stays on its ecosystem" "$installed" 0 "1 target(s)" \
+run_case "scopes scan path" "$installed" 0 "1 target(s)" \
 	GD_ACTIONS=false GD_LOCAL_SCAN=false GD_SCAN_PATHS="npm:node_modules" \
 	GD_PLAN_ONLY=false GD_BIN="$(stub 0)/guarddog" PATH="$(stub 0):$PATH"
-run_case "scan-paths pointing at nothing fails" "$installed" 1 "points at nothing" \
+run_case "rejects missing scan path" "$installed" 1 "points at nothing" \
 	GD_SCAN_PATHS="npm:vendor"
-run_case "scan-paths with an unknown ecosystem fails" "$installed" 1 "unknown ecosystem" \
+run_case "rejects unknown path ecosystem" "$installed" 1 "unknown ecosystem" \
 	GD_SCAN_PATHS="cocoapods:node_modules"
-run_case "scan-paths adds to the tracked-tree scan" "$installed" 0 "2 target(s)" \
+run_case "adds scan path target" "$installed" 0 "2 target(s)" \
 	GD_ACTIONS=false GD_ECOSYSTEMS=npm GD_SCAN_PATHS="npm:node_modules"
 
-# The path allowlist upstream does not have.
-run_case "excluding every manifest leaves nothing to scan" "$npm" 0 "nothing to scan" \
+run_case "excludes every manifest" "$npm" 0 "nothing to scan" \
 	GD_EXCLUDE_PATHS="package.json"
-run_case "a subtree glob excludes the subtree" "$nested" 0 "nothing to scan" \
+run_case "excludes subtree glob" "$nested" 0 "nothing to scan" \
 	GD_EXCLUDE_PATHS="packages/*
 services/*"
-run_case "excluding a workflow drops its target" "$mixed" 0 "npm scan" \
+run_case "excludes workflow target" "$mixed" 0 "npm scan" \
 	GD_EXCLUDE_PATHS=".github/workflows/*"
-refute_case "an excluded workflow is not verified" "$mixed" "github_action" \
+refute_case "omits excluded workflow" "$mixed" "github_action" \
 	GD_EXCLUDE_PATHS=".github/workflows/*"
 
-run_case "bare exclude-rule reaches every ecosystem" "$poly" 0 \
+run_case "applies bare rule exclusion" "$poly" 0 \
 	"guarddog npm scan --exit-non-zero-on-finding --output-format json -x typosquatting" \
 	GD_EXCLUDE_RULES="typosquatting"
-run_case "scoped exclude-rule reaches its ecosystem" "$poly" 0 \
+run_case "applies scoped rule exclusion" "$poly" 0 \
 	"pypi scan --exit-non-zero-on-finding --output-format json -x repository_integrity_mismatch" \
 	GD_EXCLUDE_RULES="pypi:repository_integrity_mismatch"
-refute_case "scoped exclude-rule stays out of the others" "$poly" \
+refute_case "limits scoped rule exclusion" "$poly" \
 	"npm scan --exit-non-zero-on-finding --output-format json -x repository_integrity_mismatch" \
 	GD_EXCLUDE_RULES="pypi:repository_integrity_mismatch"
 
-# The package allowlist upstream does not have. verify_stub <entry>... emits a
-# verify-shaped report, one array element per `name|version|score` triple.
 verify_stub() {
 	local dir="$TMP/verify-stub-$RANDOM" body="" entry name version score
 	mkdir -p "$dir"
@@ -210,63 +194,59 @@ verify_case() {
 		GD_BIN="$stub/guarddog" PATH="$stub:$PATH" "$@"
 }
 
-verify_case "an unlisted package still fails" "$one" 1 "guarddog flagged"
-verify_case "an allowlisted package stops failing the job" "$one" 0 \
+verify_case "fails unlisted package" "$one" 1 "guarddog flagged"
+verify_case "allows listed package" "$one" 0 \
 	"below the suspicious risk threshold" GD_EXCLUDE_PACKAGES="left-pad"
-verify_case "the suppression reaches the log" "$one" 0 "allowlisted: left-pad@1.3.0" \
+verify_case "logs package suppression" "$one" 0 "allowlisted: left-pad@1.3.0" \
 	GD_EXCLUDE_PACKAGES="left-pad"
-verify_case "an allowlist entry does not cover the rest of the report" "$two" 1 \
+verify_case "retains other package findings" "$two" 1 \
 	"guarddog flagged" GD_EXCLUDE_PACKAGES="left-pad"
-verify_case "a version pin allowlists only that version" "$one" 1 "guarddog flagged" \
+verify_case "rejects unmatched package version" "$one" 1 "guarddog flagged" \
 	GD_EXCLUDE_PACKAGES="left-pad@1.2.0"
-verify_case "a matching version pin holds" "$one" 0 "below the suspicious" \
+verify_case "allows matching package version" "$one" 0 "below the suspicious" \
 	GD_EXCLUDE_PACKAGES="left-pad@1.3.0"
-verify_case "a glob covers an npm scope" "$scoped" 0 "below the suspicious" \
+verify_case "matches npm scope glob" "$scoped" 0 "below the suspicious" \
 	GD_EXCLUDE_PACKAGES="@acme/*"
-verify_case "an npm scope is not read as a version" "$scoped" 0 \
+verify_case "parses npm scope" "$scoped" 0 \
 	"allowlisted: @acme/tools@2.0.0" GD_EXCLUDE_PACKAGES="@acme/tools"
-verify_case "a scoped entry reaches its ecosystem" "$one" 0 "below the suspicious" \
+verify_case "applies package ecosystem" "$one" 0 "below the suspicious" \
 	GD_EXCLUDE_PACKAGES="npm:left-pad"
-verify_case "a scoped entry stays off the others" "$one" 1 "guarddog flagged" \
+verify_case "limits package ecosystem" "$one" 1 "guarddog flagged" \
 	GD_EXCLUDE_PACKAGES="pypi:left-pad"
-verify_case "an unknown scope fails" "$one" 1 "unknown scope" \
+verify_case "rejects unknown package scope" "$one" 1 "unknown scope" \
 	GD_EXCLUDE_PACKAGES="cocoapods:left-pad"
 
-run_case "github_action is an allowlist scope" "$wf" 0 "allowlisted: actions/checkout@v4" \
+run_case "allows github_action scope" "$wf" 0 "allowlisted: actions/checkout@v4" \
 	GD_PLAN_ONLY=false GD_LOCAL_SCAN=false GD_BIN="$actions/guarddog" \
 	PATH="$actions:$PATH" GD_EXCLUDE_PACKAGES="github_action:actions/checkout"
 
-# A local scan reports a path, not a dependency, so the allowlist must not touch it.
 local_finding=$(stub 3)
-run_case "the allowlist leaves a local scan alone" "$npm" 1 "guarddog flagged" \
+run_case "ignores package list for local scan" "$npm" 1 "guarddog flagged" \
 	GD_PLAN_ONLY=false GD_ACTIONS=false GD_BIN="$local_finding/guarddog" \
 	PATH="$local_finding:$PATH" GD_EXCLUDE_PACKAGES="left-pad"
 
-run_case "sandbox stays on by default" "$npm" 0 "scan --exit-non-zero-on-finding --output-format json"
-run_case "sandbox false passes --no-sandbox" "$npm" 0 "--no-sandbox" GD_SANDBOX=false
+run_case "enables sandbox by default" "$npm" 0 "scan --exit-non-zero-on-finding --output-format json"
+run_case "disables sandbox" "$npm" 0 "--no-sandbox" GD_SANDBOX=false
 
-# The two paths that matter, plus the trap that upstream's exit code alone would hide.
 clean=$(stub 0)
 finding=$(stub 3)
 low=$(stub 3 4.3 low)
 run_case "clean scan passes" "$npm" 0 "below the suspicious risk threshold" \
 	GD_PLAN_ONLY=false GD_ACTIONS=false GD_BIN="$clean/guarddog" PATH="$clean:$PATH"
-run_case "a planted finding fails the job" "$npm" 1 "guarddog flagged 1 of 1 target(s)" \
+run_case "fails on finding" "$npm" 1 "guarddog flagged 1 of 1 target(s)" \
 	GD_PLAN_ONLY=false GD_ACTIONS=false GD_BIN="$finding/guarddog" PATH="$finding:$PATH"
-run_case "the finding count reaches the log" "$npm" 1 "issues: 3" \
+run_case "logs finding count" "$npm" 1 "issues: 3" \
 	GD_PLAN_ONLY=false GD_ACTIONS=false GD_BIN="$finding/guarddog" PATH="$finding:$PATH"
-run_case "low risk passes the default threshold" "$npm" 0 "risk: low (4.3)" \
+run_case "passes low risk by default" "$npm" 0 "risk: low (4.3)" \
 	GD_PLAN_ONLY=false GD_ACTIONS=false GD_BIN="$low/guarddog" PATH="$low:$PATH"
-run_case "the low threshold rejects low risk" "$npm" 1 "guarddog flagged" \
+run_case "fails low risk at low threshold" "$npm" 1 "guarddog flagged" \
 	GD_PLAN_ONLY=false GD_ACTIONS=false GD_MINIMUM_RISK=low \
 	GD_BIN="$low/guarddog" PATH="$low:$PATH"
-run_case "an unknown risk threshold fails" "$npm" 1 "unknown minimum risk" \
+run_case "rejects unknown risk threshold" "$npm" 1 "unknown minimum risk" \
 	GD_MINIMUM_RISK=medium
-run_case "a missing binary is an error, not a pass" "$npm" 1 "not on PATH" \
+run_case "rejects missing binary" "$npm" 1 "not on PATH" \
 	GD_PLAN_ONLY=false GD_BIN="$TMP/nope/guarddog"
 
-# Issues in the report fail the job even when upstream exits 0, which is what the
-# missing --output-format json does to --exit-non-zero-on-finding.
 silent="$TMP/stub-silent"
 mkdir -p "$silent"
 cat >"$silent/guarddog" <<'EOF'
@@ -276,10 +256,9 @@ printf '{"issues": 7, "risk_score": {"score": 8, "label": "high_risk"}, "risks":
 exit 0
 EOF
 chmod +x "$silent/guarddog"
-run_case "issues fail the job even on a zero exit code" "$npm" 1 "guarddog flagged" \
+run_case "fails report despite zero exit" "$npm" 1 "guarddog flagged" \
 	GD_PLAN_ONLY=false GD_ACTIONS=false GD_BIN="$silent/guarddog" PATH="$silent:$PATH"
 
-# The staged tree is what an exclusion acts on, so it must hold the kept files only.
 cases=$((cases + 1))
 probe="$TMP/stub-probe"
 mkdir -p "$probe"
@@ -297,12 +276,12 @@ staged=$(tr '\n' ' ' <"$TMP/staged.txt" 2>/dev/null)
 case "$staged" in
 *"dist/bundle.min.js"*)
 	fails=$((fails + 1))
-	echo "FAIL an excluded path must not reach the staged tree (got: $staged)"
+	echo "FAIL excludes staged path (got: $staged)"
 	;;
-*"package.json"*) echo "ok   the staged tree holds the kept files without the excluded ones" ;;
+*"package.json"*) echo "ok   stages included paths" ;;
 *)
 	fails=$((fails + 1))
-	echo "FAIL the staged tree is missing tracked files (got: $staged)"
+	echo "FAIL stages included paths (got: $staged)"
 	;;
 esac
 

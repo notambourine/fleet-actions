@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-# Run betterleaks over the checkout and fail the job on a finding.
-#
-# The image pin freezes the engine and its ruleset. A rule published today does not fail
-# a PR today, which is the cost of trading `latest` for a digest Dependabot rewrites.
 set -uo pipefail
 
 BL_BIN="${BL_BIN:-betterleaks}"
@@ -55,7 +51,6 @@ elif [ -n "$log_opts" ]; then
 	log_opts=""
 fi
 
-# Do not send candidate secrets to vendor validation APIs.
 args=("$BL_SCAN" "$target" --no-banner "--redact=$BL_REDACT" --confidence "$BL_CONFIDENCE")
 if [ -n "$log_opts" ]; then
 	args+=("--log-opts=$log_opts")
@@ -72,6 +67,4 @@ command -v "$BL_BIN" >/dev/null 2>&1 || fail "betterleaks binary '$BL_BIN' not o
 "$BL_BIN" "${args[@]}"
 rc=$?
 
-# betterleaks exits non-zero for a finding and for a scan it could not complete. Neither
-# is a pass, and the log above says which one happened.
-[ "$rc" -eq 0 ] || fail "betterleaks exited $rc: a finding, or a scan that did not complete"
+[ "$rc" -eq 0 ] || fail "betterleaks failed (exit $rc)"

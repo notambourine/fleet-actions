@@ -1,22 +1,17 @@
 name: runner-tier
 description: >-
-  Fail a job that asks for ubuntu-latest and needs nothing it provides over ubuntu-slim.
-  Cost gate, read offline from the workflow files.
+  Find ubuntu-latest jobs that can use ubuntu-slim. Reads workflow files offline.
 author: NoTambourine LLC
 branding:
   icon: dollar-sign
   color: gray-dark
 inputs:
   files:
-    description: >-
-      Workflow paths to read, repo-relative, one per line. Empty reads every file in
-      .github/workflows.
+    description: Repo-relative workflow paths, one per line. Empty scans .github/workflows.
     default: ""
   exclude:
     description: >-
-      Jobs held out of the rule, one glob per line matched against the JOB KEY. Prefer a
-      comment naming ubuntu-slim on the job's runs-on, which keeps the reason beside the
-      job; this input is for a pattern spanning jobs a caller does not own.
+      Excluded job-key globs, one per line. Use an ubuntu-slim comment for a single job.
     default: ""
 runs:
   using: composite

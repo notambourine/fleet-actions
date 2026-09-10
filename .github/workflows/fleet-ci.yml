@@ -33,30 +33,24 @@ on:
         default: true
       vet:
         description: >-
-          Fail on a dependency carrying a known advisory or marked malicious. The only gate
-          covering vulnerable-but-honest dependencies; costs a keyless query to SafeDep's
-          insights API per scanned package.
+          Check declared dependencies for known advisories and malware. Queries SafeDep per package.
         type: boolean
         default: true
       pin-osv:
         description: >-
-          Query OSV at the source commit behind every SHA-pinned action and digest-pinned
-          base image. The only gate covering what a workflow executes rather than what a
-          manifest declares; costs one keyless OSV query per pin.
+          Check action and base-image source commits against OSV. Uses one keyless query per pin.
         type: boolean
         default: true
       guarddog:
         description: >-
-          GuardDog malware heuristics over the tracked tree and referenced actions. Opt-in:
-          the actions gate fetches action source, and the rule set only moves when a pin
-          bump lands.
+          Scan tracked files and referenced actions with GuardDog. Disabled by default because
+          action scans fetch source and rule updates require a pin bump.
         type: boolean
         default: false
       runner-tier:
         description: >-
-          Fail a job asking for ubuntu-latest that needs nothing it provides over ubuntu-slim.
-          Opt-in: a cost heuristic has no business failing a pull request nobody pointed it at,
-          and the tier is a judgement about a job's own weight.
+          Find ubuntu-latest jobs that can use ubuntu-slim. Disabled by default because this is
+          a cost heuristic.
         type: boolean
         default: false
 
@@ -126,9 +120,7 @@ on:
         default: true
       vet-policy:
         description: >-
-          Repo-relative vet filter suite replacing the generated one. It takes over
-          vet-severity and vet-malware, so the file owns the whole decision. This is where
-          a license or scorecard gate goes.
+          Repo-relative vet filter suite. Replaces vet-severity and vet-malware.
         type: string
         default: ""
       vet-exclude:
@@ -138,9 +130,7 @@ on:
 
       pin-osv-severity:
         description: >-
-          Lowest advisory severity that fails the job, cumulative: high covers critical.
-          An OSV record carrying no severity label counts as critical, so an unrated
-          compromise report is never dropped. none gates on malware alone.
+          Minimum advisory severity. Unrated records count as critical. none checks malware only.
         type: string
         default: high
       pin-osv-malware:
@@ -157,8 +147,7 @@ on:
         default: true
       pin-osv-require-attestation:
         description: >-
-          Fail an image whose build attestation cannot be read, rather than warning that
-          it went unqueried. Off because most published images carry no attestation.
+          Fail when an image build attestation cannot be read. Otherwise emit a warning.
         type: boolean
         default: false
       pin-osv-allow:
@@ -175,27 +164,21 @@ on:
         type: boolean
         default: true
       guarddog-actions:
-        description: >-
-          Scan the JavaScript of the actions each workflow references. That code runs with
-          the workflow's token and nothing else in the fleet reads it.
+        description: Fetch and scan JavaScript from referenced actions.
         type: boolean
         default: true
       guarddog-registry-verify:
         description: >-
-          Also download and score every declared dependency. Off because Socket and the update
-          bots cover that surface, at a registry round trip per package.
+          Download and score every declared dependency. Disabled by default.
         type: boolean
         default: false
       guarddog-ecosystems:
         description: >-
-          auto picks every ecosystem whose manifest the tree holds and skips the rest. Or name
-          a subset: npm, pypi, go, crates, rubygems.
+          auto detects ecosystems from manifests. Or list npm, pypi, go, crates, or rubygems.
         type: string
         default: auto
       guarddog-exclude-paths:
-        description: >-
-          Paths kept out of the scan, one glob per line. `*` crosses `/`, so dist/* drops the
-          subtree. guarddog has no ignore file of its own.
+        description: Excluded path globs, one per line. `*` crosses `/`.
         type: string
         default: ""
       guarddog-exclude-rules:
@@ -227,9 +210,7 @@ on:
 
       runner-tier-exclude:
         description: >-
-          Jobs held out of the tier rule, one glob per line matched against the job key. Prefer
-          a comment naming ubuntu-slim on the job's runs-on, which keeps the reason beside the
-          job; this is for a pattern spanning jobs the caller does not own.
+          Excluded job-key globs, one per line. Use an ubuntu-slim comment for a single job.
         type: string
         default: ""
 
