@@ -1,10 +1,4 @@
 #!/bin/bash
-# Behavior tests for scripts/check-runner-tier.sh. Each case writes one fixture workflow into
-# a throwaway tree and asserts the exit code plus one output substring, so both the code and
-# one message are load-bearing.
-#
-# Hermetic: fixtures never land in this repo's own .github/workflows, and the last case runs
-# the gate over the real tree, which must pass its own rule.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -24,7 +18,6 @@ if ! command -v yq >/dev/null 2>&1; then
 	exit 2
 fi
 
-# new_repo <name>: a git repo with an empty workflows dir, and $REPO/$WF pointing into it.
 new_repo() {
 	REPO="$TMP/$1"
 	mkdir -p "$REPO/.github/workflows"
@@ -32,11 +25,8 @@ new_repo() {
 	WF="$REPO/.github/workflows/ci.yml"
 }
 
-# wf <body>: the fixture workflow for this case.
 wf() { printf '%s\n' "$1" >"$WF"; }
 
-# run_case <name> <want-rc> <output-substring>: runs the gate from $REPO.
-# $EXCLUDE becomes RUNNER_TIER_EXCLUDE, $FILES becomes RUNNER_TIER_FILES.
 run_case() {
 	local name="$1" want_rc="$2" want_out="$3" out rc ok=1
 	cases=$((cases + 1))
@@ -54,7 +44,6 @@ run_case() {
 	fi
 }
 
-# 1. the planted positive: nothing here needs the expensive tier.
 new_repo planted
 wf 'on: push
 jobs:
@@ -63,10 +52,9 @@ jobs:
     timeout-minutes: 5
     steps:
       - run: echo hi'
-run_case "a bare ubuntu-latest job is a finding" 1 "job 'lint' needs nothing ubuntu-latest provides"
-run_case "and the summary counts it" 1 "1 of 1 ubuntu-latest job(s) could run on ubuntu-slim"
+run_case "flags eligible job" 1 "job 'lint' can use ubuntu-slim"
+run_case "counts eligible job" 1 "1 of 1 ubuntu-latest job(s) could run on ubuntu-slim"
 
-# 2. already slim, or on a tier this gate does not judge.
 new_repo slim
 wf 'on: push
 jobs:
@@ -79,9 +67,8 @@ jobs:
     runs-on: macos-latest
     steps:
       - run: echo hi'
-run_case "another tier is out of scope" 0 "no ubuntu-latest jobs"
+run_case "ignores other runners" 0 "no ubuntu-latest jobs"
 
-# 3. each disqualifier, one job at a time. Every one of these must come out clean.
 new_repo container
 wf 'on: push
 jobs:
@@ -91,7 +78,7 @@ jobs:
     container: node:22
     steps:
       - run: echo hi'
-run_case "container: needs the tier" 0 "all 1 ubuntu-latest job(s) need that tier"
+run_case "excludes container" 0 "1 ubuntu-latest job(s) require that runner"
 
 new_repo services
 wf 'on: push
@@ -104,7 +91,7 @@ jobs:
         image: postgres
     steps:
       - run: echo hi'
-run_case "services: needs the tier" 0 "all 1 ubuntu-latest job(s) need that tier"
+run_case "excludes services" 0 "1 ubuntu-latest job(s) require that runner"
 
 new_repo hardened
 wf 'on: push
@@ -115,7 +102,7 @@ jobs:
     steps:
       - uses: step-security/harden-runner@v2
       - run: echo hi'
-run_case "harden-runner cannot load unprivileged" 0 "need that tier"
+run_case "excludes harden-runner" 0 "require that runner"
 
 new_repo heavy
 wf 'on: push
@@ -125,7 +112,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - run: npm ci'
-run_case "an install command is weight" 0 "need that tier"
+run_case "excludes install command" 0 "require that runner"
 
 new_repo slimgap
 wf 'on: push
@@ -135,7 +122,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - run: envsubst < in > out'
-run_case "a tool slim does not ship" 0 "need that tier"
+run_case "excludes missing tool" 0 "require that runner"
 
 new_repo uncapped
 wf 'on: push
@@ -144,7 +131,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: echo hi'
-run_case "no cap: slim would kill it at 15" 0 "need that tier"
+run_case "excludes missing timeout" 0 "require that runner"
 
 new_repo overcap
 wf 'on: push
@@ -154,17 +141,15 @@ jobs:
     timeout-minutes: 30
     steps:
       - run: echo hi'
-run_case "a cap above slim's 15-minute kill" 0 "need that tier"
+run_case "excludes timeout above 15" 0 "require that runner"
 
 new_repo reusable
 wf 'on: push
 jobs:
   a:
     uses: ./.github/workflows/other.yml'
-run_case "a reusable call has no runner of its own" 0 "no ubuntu-latest jobs"
+run_case "ignores reusable workflow" 0 "no ubuntu-latest jobs"
 
-# 4. the case this gate exists for: an in-tree action whose runtime is docker. The step text
-#    never says docker, so only reading the action's own file catches it.
 new_repo localdocker
 mkdir -p "$REPO/tools/thing"
 printf 'name: thing\nruns:\n  using: docker\n  image: Dockerfile\n' \
@@ -176,7 +161,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: ./tools/thing'
-run_case "an in-tree docker action needs the tier" 0 "need that tier"
+run_case "excludes local docker action" 0 "require that runner"
 
 wf 'on: push
 jobs:
@@ -185,32 +170,31 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: $/tools/thing'
-run_case "the same-repository \$/ form too" 0 "need that tier"
+run_case "excludes local docker action with \$/" 0 "require that runner"
 
 printf 'name: thing\nruns:\n  using: composite\n  steps: []\n' >"$REPO/tools/thing/action.yml"
-run_case "a composite in-tree action does not" 1 "job 'a' needs nothing"
+run_case "allows local composite action" 1 "job 'a' can use ubuntu-slim"
 
-# 5. waivers, both paths, and both directions.
 new_repo waived
 wf 'on: push
 jobs:
   a:
-    # Reason lives here: this job is exceptional.
+    # Uses a vendored binary.
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - run: echo hi'
-run_case "a comment with no keyword is not a waiver" 1 "job 'a' needs nothing"
+run_case "requires waiver keyword" 1 "job 'a' can use ubuntu-slim"
 
 wf 'on: push
 jobs:
   a:
-    # Held on the expensive tier deliberately; ubuntu-slim breaks the vendored binary.
+    # ubuntu-slim breaks the vendored binary.
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - run: echo hi'
-run_case "a head comment naming ubuntu-slim waives it" 0 "need that tier"
+run_case "accepts head-comment waiver" 0 "require that runner"
 
 wf 'on: push
 jobs:
@@ -219,7 +203,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - run: echo hi'
-run_case "a line comment on the value waives it" 0 "need that tier"
+run_case "accepts line-comment waiver" 0 "require that runner"
 
 new_repo excluded
 wf 'on: push
@@ -229,11 +213,10 @@ jobs:
     timeout-minutes: 5
     steps:
       - run: echo hi'
-run_case "an unexcluded job still fires" 1 "job 'e2e-chrome' needs nothing"
-EXCLUDE='e2e-*' run_case "an exclude glob holds it out" 0 "need that tier"
-EXCLUDE='other-*' run_case "a glob that misses does not" 1 "job 'e2e-chrome' needs nothing"
+run_case "flags unexcluded job" 1 "job 'e2e-chrome' can use ubuntu-slim"
+EXCLUDE='e2e-*' run_case "accepts exclude glob" 0 "require that runner"
+EXCLUDE='other-*' run_case "ignores unmatched glob" 1 "job 'e2e-chrome' can use ubuntu-slim"
 
-# 6. input handling.
 new_repo files
 wf 'on: push
 jobs:
@@ -242,19 +225,18 @@ jobs:
     timeout-minutes: 5
     steps:
       - run: echo hi'
-FILES='.github/workflows/nope.yml' run_case "a named file that is missing is a scan failure" 2 "no such workflow file"
-FILES='.github/workflows/ci.yml' run_case "a named file is read" 1 "job 'a' needs nothing"
+FILES='.github/workflows/nope.yml' run_case "rejects missing file" 2 "no such workflow file"
+FILES='.github/workflows/ci.yml' run_case "scans named file" 1 "job 'a' can use ubuntu-slim"
 
 new_repo unparsed
 printf 'jobs: [\n' >"$WF"
-run_case "an unparseable workflow is a scan failure, never a pass" 2 "could not parse"
+run_case "rejects invalid workflow" 2 "could not parse"
 
 new_repo empty
 rm -rf "$REPO/.github"
-run_case "no workflows at all" 0 "no workflow files to read"
+run_case "accepts empty workflow set" 0 "no workflow files to read"
 
-# 7. this repo passes its own gate.
-REPO="$REPO_ROOT" run_case "this repo passes its own gate" 0 "need that tier"
+REPO="$REPO_ROOT" run_case "passes repository" 0 "require that runner"
 
 echo
 echo "${cases} cases, ${fails} failed"

@@ -1,12 +1,4 @@
 #!/usr/bin/env bash
-# Run guarddog over this repo. Two gates, both defaulting on:
-#
-#   local   offline YARA over the tracked tree, per ecosystem whose manifest exists
-#   actions `github_action verify` over each workflow, which fetches the JavaScript
-#           of the actions it references
-#
-# Registry `verify` of declared dependencies is off by default: Socket and the
-# update bots already cover that surface, and it downloads every package.
 set -uo pipefail
 
 GD_BIN="${GD_BIN:-guarddog}"

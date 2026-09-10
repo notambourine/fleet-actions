@@ -1,7 +1,6 @@
 name: guarddog
 description: >-
-  Run DataDog GuardDog from a hash-pinned install: offline YARA over the tracked tree
-  and a scan of the actions the workflows reference. Findings fail the job.
+  Scan tracked files and referenced actions with a hash-pinned GuardDog install.
 author: NoTambourine LLC
 branding:
   icon: search
@@ -15,14 +14,11 @@ inputs:
     default: "true"
   actions:
     description: >-
-      Scan the JavaScript of the actions each workflow references. This is code that
-      runs with the workflow's token, and it is fetched from GitHub.
+      Fetch and scan JavaScript from referenced actions.
     default: "true"
   registry-verify:
     description: >-
-      Also download and score every declared dependency. Off because Socket and the
-      update bots already cover that surface for the cost of a registry round trip
-      per package.
+      Download and score every declared dependency.
     default: "false"
   ecosystems:
     description: >-
@@ -37,9 +33,7 @@ inputs:
     default: ""
   exclude-paths:
     description: >-
-      Paths kept out of the scan, one glob per line, matched against tracked
-      repo-relative paths. `*` crosses `/`, so `dist/*` drops the subtree. guarddog
-      itself has no ignore file, baseline, or path allowlist; this is that.
+      Excluded repo-relative path globs, one per line. `*` crosses `/`.
     default: ""
   exclude-rules:
     description: >-
@@ -96,7 +90,7 @@ runs:
         resolved=$("$UV_PROJECT_ENVIRONMENT/bin/guarddog" --version)
         printf 'version=%s\n' "$resolved" >> "$GITHUB_OUTPUT"
         printf 'bin=%s\n' "$UV_PROJECT_ENVIRONMENT/bin/guarddog" >> "$GITHUB_OUTPUT"
-        echo "guarddog $resolved installed from the pinned tree"
+        echo "guarddog $resolved"
 
     - name: guarddog verify
       shell: bash

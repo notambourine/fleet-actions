@@ -1,7 +1,6 @@
 name: vet
 description: >-
-  Fail the job when a dependency carries a known advisory or is a known malicious package,
-  using vet from a digest-pinned image.
+  Check declared dependencies for known advisories and malware with a digest-pinned vet image.
 author: NoTambourine LLC
 branding:
   icon: shield
@@ -10,16 +9,14 @@ branding:
 inputs:
   severity:
     description: >-
-      Lowest advisory severity that fails the job, cumulative: high covers critical too.
-      none gates on malware alone.
+      Minimum advisory severity. none checks malware only.
     default: high
   malware:
     description: Also fail on a package OSV marks malicious (a MAL- identifier).
     default: "true"
   policy:
     description: >-
-      Repo-relative vet filter suite replacing the generated one. Takes over severity and
-      malware, so the file owns the whole decision.
+      Repo-relative filter suite. Replaces severity and malware.
     default: ""
   exclude:
     description: Paths kept out of the scan, one vet exclusion pattern per line.

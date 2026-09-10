@@ -1,12 +1,4 @@
 #!/usr/bin/env bash
-# Run vet over the tracked tree and fail the job on a policy match.
-#
-# The filter suite is assembled here so a caller picks a severity instead of writing CEL.
-# VET_POLICY hands the whole decision to the caller's own suite file.
-#
-# Vulnerability, malware, and scorecard data come from SafeDep's insights API at scan
-# time. The image pin freezes the engine and this suite, never the finding set: a CVE
-# published today fails a PR today, which is the point of the gate.
 set -uo pipefail
 
 VET_BIN="${VET_BIN:-vet}"
@@ -54,7 +46,7 @@ cd "$VET_ROOT" || fail "root '$VET_ROOT' is not a directory"
 if [ -n "$VET_POLICY" ]; then
 	[ -f "$VET_POLICY" ] || fail "policy '$VET_POLICY' is not a file"
 	suite="$VET_POLICY"
-	echo "vet: using the caller's filter suite $suite"
+	echo "vet: filter suite $suite"
 else
 	# Cumulative: `high` is critical or high, and so on down.
 	severities=()
@@ -125,8 +117,6 @@ printf '::group::vet scan\n'
 rc=$?
 printf '::endgroup::\n'
 
-# vet exits non-zero for a policy match and for a scan it could not complete. Neither is
-# a pass, and the grouped log above says which one happened.
-[ "$rc" -eq 0 ] || fail "vet exited $rc: a policy match, or a scan that did not complete"
+[ "$rc" -eq 0 ] || fail "vet failed (exit $rc)"
 
 echo "vet: no dependency matched the ${VET_SEVERITY} threshold"

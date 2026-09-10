@@ -22,13 +22,11 @@ jobs:
     permissions:
       contents: read
     uses: notambourine/fleet-actions/.github/workflows/fleet-ci.yml@<sha> # v1.0.1
-    # Every check but guarddog and runner-tier defaults to true. Set its name to false to
-    # disable it.
+    # guarddog and runner-tier default to false. Other checks default to true.
     # with:
-    #   guarddog: true # Off by default. One of the two checks a caller opts into.
-    #   runner-tier: true # Off by default. Cost, not security: flags an ubuntu-latest job
-    #     that needs nothing ubuntu-slim lacks.
-    #   runner-tier-exclude: | # Empty; a comment naming ubuntu-slim waives one job.
+    #   guarddog: true
+    #   runner-tier: true # Find ubuntu-latest jobs that can use ubuntu-slim.
+    #   runner-tier-exclude: | # Job-key globs. Use an ubuntu-slim comment for one job.
     #     e2e-*
     #   scan-mode: git # betterleaks scans the full history.
     #   wormhook-mode: deep # Includes tracked node_modules when present.
@@ -70,12 +68,10 @@ Relax either through the inputs above rather than by disabling `actionlint`.
 
 ## Runner tier
 
-`runner-tier` fails a job that asks for `ubuntu-latest` and needs nothing it provides over
-`ubuntu-slim` - no container, no services, no harden-runner, no docker, no install-or-build
-step, no tool missing from slim's image, and a `timeout-minutes` inside slim's 15-minute kill.
-Waive one job with a comment naming `ubuntu-slim` on its `runs-on`, or a pattern with
-`runner-tier-exclude`. See `tools/runner-tier/README.md` for the full disqualifier list and
-what to read before flipping a job.
+`runner-tier` finds `ubuntu-latest` jobs that can use `ubuntu-slim`. It excludes jobs that use
+containers, services, harden-runner, Docker, install or build commands, tools absent from slim,
+or timeouts outside slim's 15-minute limit. Waive one job with an `ubuntu-slim` comment on
+`runs-on`, or exclude job-key globs with `runner-tier-exclude`.
 
 Every check except `guarddog` and `runner-tier` is enabled by default. The workflow reports one check named
 `<workflow name> / <calling job>`, so these two names are load-bearing: the

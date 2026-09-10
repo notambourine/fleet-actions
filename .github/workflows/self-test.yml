@@ -18,7 +18,7 @@ jobs:
     with:
       dash-exclude-defaults: false
       guarddog: true # Opt-in for callers, so only the self-test covers the gate.
-      runner-tier: true # Same: opt-in for callers, so this is the only clean-case coverage.
+      runner-tier: true # Opt-in for callers.
 
   betterleaks-self-scan:
     runs-on: ubuntu-latest
@@ -41,11 +41,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Plant a workflow with a known error
+      - name: Plant invalid workflow
         run: |
           mkdir -p planted
-          # An unknown event and an unknown checkout input. No expression syntax here: the
-          # runner would expand it before the file is written.
+          # Avoid expressions; the runner expands them before writing the fixture.
           cat > planted/bad.yml <<'EOF'
           on: pushh
           jobs:
@@ -63,7 +62,7 @@ jobs:
           files: planted/bad.yml
           shellcheck: "false"
           pyflakes: "false"
-      - name: Assert the planted error failed the action
+      - name: Assert lint failure
         env:
           OUTCOME: ${{ steps.lint.outcome }}
           RESULT: ${{ steps.lint.outputs.result }}
@@ -73,10 +72,8 @@ jobs:
           [ "$OUTCOME" = failure ] || { echo "::error::action passed a planted error"; exit 1; }
           [ "$RESULT" = problems-found ] || { echo "::error::result was $RESULT, not problems-found"; exit 1; }
           [ "${COUNT:-0}" -ge 1 ] || { echo "::error::problem-count was '$COUNT'"; exit 1; }
-      - name: Plant a workflow the fleet policy defaults reject
+      - name: Plant policy violations
         run: |
-          # Correct in every other respect: only the missing permissions and the
-          # out-of-range timeout may fail it.
           cat > planted/policy.yml <<'EOF'
           on: push
           jobs:
@@ -99,7 +96,7 @@ jobs:
           config-file: planted/policy-config.yml
           shellcheck: "false"
           pyflakes: "false"
-      - name: Assert the policy caught both
+      - name: Assert policy findings
         env:
           OUTCOME: ${{ steps.policy.outcome }}
           OUTPUT: ${{ steps.policy.outputs.output }}
