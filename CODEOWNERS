@@ -21,3 +21,8 @@ go.mod @tomfuertes
 go.sum @tomfuertes
 Cargo.toml @tomfuertes
 Cargo.lock @tomfuertes
+pyproject.toml @tomfuertes
+uv.lock @tomfuertes
+poetry.lock @tomfuertes
+composer.json @tomfuertes
+composer.lock @tomfuertes
