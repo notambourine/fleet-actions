@@ -381,7 +381,7 @@ jobs:
 
       - name: wormhook
         if: ${{ inputs.wormhook && !cancelled() }}
-        uses: notambourine/wormhook@1270e6a1e7dc2fad0a0abe738a1c56c6e6496cff # v0.31.1
+        uses: notambourine/wormhook@0ba29092297f7f790eaa73cd2108940b10c99b49 # v0.32.0
         with:
           mode: ${{ inputs.wormhook-mode }}
 
