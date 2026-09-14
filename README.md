@@ -153,7 +153,7 @@ jobs:
 
       - run: npm ci
 
-      - uses: notambourine/wormhook@<sha> # v0.32.0
+      - uses: notambourine/wormhook@<sha> # v0.32.2
         with:
           mode: deep
 
