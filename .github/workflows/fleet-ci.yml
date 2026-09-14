@@ -245,6 +245,13 @@ on:
           The fleet default matches ubuntu-slim's own 15-minute kill.
         type: number
         default: 15
+      actionlint-cache-policies:
+        description: >-
+          Require an explicit cache-mode ceiling on pull_request_target, issue_comment, and
+          workflow_run, and report cache steps an explicit mode disables. Setting false also
+          drops the check for write grants on those triggers.
+        type: boolean
+        default: true
       actionlint-config-extra:
         description: Raw actionlint config YAML merged over the fleet config and the caller's own file.
         type: string
@@ -302,6 +309,7 @@ jobs:
         env:
           EXTRA_LABELS: ${{ inputs.actionlint-extra-labels }}
           CONFIG_EXTRA: ${{ inputs.actionlint-config-extra }}
+          CACHE_POLICIES: ${{ inputs.actionlint-cache-policies }}
           REQUIRE_PERMISSIONS: ${{ inputs.actionlint-require-permissions }}
           TIMEOUT_MIN: ${{ inputs.actionlint-job-timeout-min }}
           TIMEOUT_MAX: ${{ inputs.actionlint-job-timeout-max }}
@@ -326,11 +334,17 @@ jobs:
               if [ -n "$label" ]; then echo "    - $label"; fi
             done
             # An empty policy mapping is a config error, so emit the key only when it has one.
-            if [ -n "$PERMISSIONS" ] || [ ${#BOUNDS[@]} -gt 0 ]; then
+            if [ -n "$PERMISSIONS" ] || [ ${#BOUNDS[@]} -gt 0 ] || [ "$CACHE_POLICIES" = false ]; then
               echo "policy:"
               if [ -n "$PERMISSIONS" ]; then echo "  require-permissions: $PERMISSIONS"; fi
               if [ ${#BOUNDS[@]} -gt 0 ]; then
                 printf '  require-job-timeout: {%s}\n' "$(IFS=,; echo "${BOUNDS[*]}")"
+              fi
+              # The three cache policies are on by default and `policy: {}` does not disable them.
+              if [ "$CACHE_POLICIES" = false ]; then
+                echo "  cache-call-unrestricted: false"
+                echo "  cache-operation: false"
+                echo "  cache-write-untrusted: false"
               fi
             fi
           } > "${RUNNER_TEMP}/fleet.yml"
