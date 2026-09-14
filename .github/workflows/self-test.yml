@@ -107,6 +107,31 @@ jobs:
           [ "$OUTCOME" = failure ] || { echo "::error::policy passed a job with no permissions and a 120m timeout"; exit 1; }
           printf '%s' "$OUTPUT" | grep -q permissions || { echo "::error::no permissions finding"; exit 1; }
           printf '%s' "$OUTPUT" | grep -q timeout || { echo "::error::no timeout finding"; exit 1; }
+      - name: Plant an unrestricted reusable call
+        run: |
+          cat > planted/cache.yml <<'EOF'
+          on: pull_request_target
+          jobs:
+            call:
+              permissions: {}
+              uses: octocat/example/.github/workflows/ci.yml@1111111111111111111111111111111111111111
+          EOF
+      # No config-file, so this covers the default a caller with no config of its own gets.
+      - id: cache
+        continue-on-error: true
+        uses: ./tools/actionlint
+        with:
+          files: planted/cache.yml
+          shellcheck: "false"
+          pyflakes: "false"
+      - name: Assert cache policy findings
+        env:
+          OUTCOME: ${{ steps.cache.outcome }}
+          OUTPUT: ${{ steps.cache.outputs.output }}
+        run: |
+          printf '%s\n' "$OUTPUT"
+          [ "$OUTCOME" = failure ] || { echo "::error::cache policies passed a call with no cache-mode"; exit 1; }
+          printf '%s' "$OUTPUT" | grep -q cache-call-unrestricted || { echo "::error::no cache-call-unrestricted finding"; exit 1; }
 
   tools:
     runs-on: ubuntu-latest

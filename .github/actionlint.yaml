@@ -1,5 +1,0 @@
-# actionlint 1.15 predates GitHub's same-repository `$/` action reference.
-paths:
-  .github/workflows/fleet-ci.yml:
-    ignore:
-      - 'specifying action "\$/.+" in invalid format'

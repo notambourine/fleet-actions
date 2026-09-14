@@ -60,7 +60,20 @@ jobs:
     #   actionlint-require-permissions: job # workflow, or off, relaxes it.
     #   actionlint-job-timeout-min: 5 # 0 drops the bound.
     #   actionlint-job-timeout-max: 15 # ubuntu-slim kills a job at 15 anyway.
+    #   actionlint-cache-policies: true # false drops all three cache checks.
 ```
+
+## Cache access on low-trust triggers
+
+A workflow calling a reusable workflow on `pull_request_target`, `issue_comment`, or
+`workflow_run` must declare `cache-mode:`, on the workflow or on the job making the call.
+`read` restores caches without writing them; `none` forbids both. GitHub's default is
+read-only but does not cap a callee that asks for write access, so the ceiling has to be
+explicit. Workflows on `pull_request` and `push` need nothing.
+
+Two checks come with it: a write grant on those triggers is reported, as is an
+`actions/cache` step whose operation the declared mode disables. Set
+`actionlint-cache-policies: false` to drop all three.
 
 ## Job permissions and timeouts
 
