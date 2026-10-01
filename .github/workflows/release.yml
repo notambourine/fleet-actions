@@ -2,7 +2,7 @@ name: release
 
 on:
   push:
-    tags: ["v1.*"]
+    branches: [main]
 
 permissions:
   contents: write
@@ -19,62 +19,51 @@ jobs:
 
   release:
     needs: self-test
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: write
     steps:
-      - name: validate, publish, and promote v1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: tag, publish, and promote v1
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
-          TAG: ${{ github.ref_name }}
           SHA: ${{ github.sha }}
         run: |
-          if [[ ! "$TAG" =~ ^v1\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-            echo "::error::Expected a stable v1.N.P tag, got $TAG"; exit 1
-          fi
-          TAG_SHA=$(gh api "repos/$REPO/commits/$TAG" --jq .sha)
-          if [ "$TAG_SHA" != "$SHA" ]; then
-            echo "::error::$TAG no longer points to $SHA"; exit 1
-          fi
-          STATUS=$(gh api "repos/$REPO/compare/$SHA...main" --jq .status)
-          if [ "$STATUS" != ahead ] && [ "$STATUS" != identical ]; then
-            echo "::error::$SHA is not on main"; exit 1
-          fi
-          RELEASES=$(gh api --paginate "repos/$REPO/releases" | jq -s 'add')
-          PUBLISHED=$(jq -r '.[] | select(.draft == false and .prerelease == false) |
-            .tag_name | select(test("^v1\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"))' <<<"$RELEASES")
-          # Lexical comparison does not order v1.9.0 and v1.10.0 correctly.
-          LATEST=$(printf '%s\n%s\n' "$TAG" "$PUBLISHED" | grep . | sort -V | tail -1)
-          if [ "$LATEST" != "$TAG" ]; then
-            echo "Skipping $TAG: $LATEST is already published"; exit 0
+          stable() { grep -E '^v1\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' | sort -V | tail -1; }
+          # A rerun after a partial failure resumes with the tag it already created.
+          TAG=$(git tag --points-at "$SHA" | stable || true)
+          LAST=$(git tag --merged "$SHA" --no-contains "$SHA" | stable)
+          if [ -z "$TAG" ]; then
+            IFS=. read -r _ MINOR PATCH <<<"$LAST"
+            inputs() { git show "$1:.github/workflows/fleet-ci.yml" | yq -o=json '.on.workflow_call.inputs'; }
+            if [ "$(inputs "$LAST")" != "$(inputs "$SHA")" ]; then
+              TAG="v1.$((MINOR + 1)).0"
+            else
+              TAG="v1.$MINOR.$((PATCH + 1))"
+            fi
+            gh api -X POST "repos/$REPO/git/refs" -f ref="refs/tags/$TAG" -f sha="$SHA" >/dev/null
           fi
 
-          RELEASE=$(jq --arg tag "$TAG" '.[] | select(.tag_name == $tag)' <<<"$RELEASES")
-          if [ -n "$RELEASE" ]; then
-            if ! jq -e '.draft == false and .prerelease == false' <<<"$RELEASE" >/dev/null; then
-              echo "::error::$TAG exists as a draft or prerelease"; exit 1
-            fi
-          else
-            # --generate-notes emits merged pull request titles only. An upgrade note is the
-            # one place a consumer learns a new release needs a change on their side.
-            gh api "repos/$REPO/releases/generate-notes" -f tag_name="$TAG" --jq .body > notes.md
-            UPGRADE=$(gh api "repos/$REPO/contents/docs/release-notes/$TAG.md?ref=$SHA" \
-              --jq .content 2>/dev/null || true)
-            if [ -n "$UPGRADE" ]; then
-              { base64 -d <<<"$UPGRADE"; echo; cat notes.md; } > combined.md
-              mv combined.md notes.md
-            fi
+          if ! gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            # Generated notes carry pull request titles only. A note added under
+            # docs/release-notes is the one place a caller learns it must change something.
+            gh api "repos/$REPO/releases/generate-notes" -f tag_name="$TAG" --jq .body > generated.md
+            git diff --name-only --diff-filter=A "$LAST" "$SHA" -- 'docs/release-notes/*.md' |
+              while read -r note; do cat "$note"; echo; done > notes.md
+            cat generated.md >> notes.md
             gh release create "$TAG" --repo "$REPO" --verify-tag --notes-file notes.md --title "$TAG"
           fi
 
-          REF_EXISTS=$(gh api "repos/$REPO/git/matching-refs/tags/v1" \
-            --jq 'any(.[]; .ref == "refs/tags/v1")')
-          if [ "$REF_EXISTS" = true ]; then
-            gh api -X PATCH "repos/$REPO/git/refs/tags/v1" -f sha="$SHA" -F force=true
-          else
-            gh api -X POST "repos/$REPO/git/refs" -f ref=refs/tags/v1 -f sha="$SHA"
+          NEWEST=$(gh api --paginate "repos/$REPO/git/matching-refs/tags/v1." --jq '.[].ref' |
+            sed 's|^refs/tags/||' | stable)
+          if [ "$NEWEST" != "$TAG" ]; then
+            echo "Skipping v1: a newer release exists"; exit 0
           fi
+          gh api -X PATCH "repos/$REPO/git/refs/tags/v1" -f sha="$SHA" -F force=true >/dev/null
           echo "v1 -> $SHA ($TAG)"
