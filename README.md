@@ -24,6 +24,7 @@ jobs:
     uses: notambourine/fleet-actions/.github/workflows/fleet-ci.yml@<sha> # v1.0.1
     # guarddog, runner-tier, and vet default to false. Other checks default to true.
     # with:
+    #   runs-on: blacksmith-2vcpu-ubuntu-2404 # Defaults to ubuntu-latest.
     #   guarddog: true
     #   runner-tier: true # Suggest clear ubuntu-slim cost savings in private repos.
     #   vet: true # Advisories and malware in declared dependencies. Read "vet cost" below.

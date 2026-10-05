@@ -56,6 +56,11 @@ on:
         type: boolean
         default: false
 
+      runs-on:
+        description: Runner label for the fleet job, such as blacksmith-2vcpu-ubuntu-2404.
+        type: string
+        default: ubuntu-latest
+
       scan-mode:
         description: betterleaks subcommand, git or dir. git fingerprints commits.
         type: string
@@ -271,7 +276,7 @@ concurrency:
 
 jobs:
   fleet:
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runs-on }}
     timeout-minutes: 15
     permissions:
       contents: read
