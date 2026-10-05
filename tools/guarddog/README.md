@@ -111,8 +111,9 @@ JSON output provides the risk score. Malformed reports and scan errors fail.
 
 ## Sandbox
 
-GuardDog uses Landlock with no network and a restricted filesystem. Unsupported platforms fail.
-`sandbox: false` disables the sandbox.
+GuardDog uses Landlock with no network and a restricted filesystem. Unsupported platforms fail,
+Blacksmith runners among them. Run guarddog on a GitHub-hosted runner, or set `sandbox: false`,
+which runs untrusted package code unsandboxed.
 
 ## Local use
 

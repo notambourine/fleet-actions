@@ -11,13 +11,24 @@ permissions:
 
 jobs:
   fleet-ci:
+    name: fleet-ci (${{ matrix.runner }})
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Blacksmith lacks guarddog's kernel sandbox, so only the GitHub-hosted leg covers it.
+          - runner: blacksmith-2vcpu-ubuntu-2404
+            guarddog: false
+          - runner: ubuntu-latest
+            guarddog: true
     uses: ./.github/workflows/fleet-ci.yml
     with:
+      runs-on: ${{ matrix.runner }}
       actionlint-extra-labels: blacksmith-2vcpu-ubuntu-2404
       dash-exclude-defaults: false
-      guarddog: true # Opt-in for callers, so only the self-test covers the gate.
+      guarddog: ${{ matrix.guarddog }} # Opt-in for callers, so only the self-test covers the gate.
       runner-tier: true # Opt-in for callers.
       vet: true # Opt-in for callers. This tree declares two manifests, so the scan is cheap.
 

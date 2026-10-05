@@ -86,6 +86,14 @@ a caller-side timeout does not reach it.
 
 Relax either through the inputs above rather than by disabling `actionlint`.
 
+## Runner
+
+`runs-on` picks the fleet job's runner; the default is `ubuntu-latest`. Blacksmith runners lack
+the Landlock sandbox `guarddog` needs, so a repository on Blacksmith keeps `guarddog` off, sets
+`guarddog-sandbox: false`, or calls the workflow a second time on a GitHub-hosted runner with
+only `guarddog` on. A repository that runs its own jobs on Blacksmith also lists the label in
+`actionlint-extra-labels`.
+
 ## Runner tier
 
 `runner-tier` suggests `ubuntu-slim` only for clearly lightweight jobs in private repositories.
