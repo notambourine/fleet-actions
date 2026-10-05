@@ -15,7 +15,6 @@ jobs:
       contents: read
     uses: ./.github/workflows/fleet-ci.yml
     with:
-      runs-on: blacksmith-2vcpu-ubuntu-2404
       actionlint-extra-labels: blacksmith-2vcpu-ubuntu-2404
       dash-exclude-defaults: false
       guarddog: true # Opt-in for callers, so only the self-test covers the gate.

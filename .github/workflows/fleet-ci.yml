@@ -57,7 +57,9 @@ on:
         default: false
 
       runs-on:
-        description: Runner label for the fleet job, such as blacksmith-2vcpu-ubuntu-2404.
+        description: >-
+          Runner label for the fleet job, such as blacksmith-2vcpu-ubuntu-2404. Blacksmith
+          lacks guarddog's kernel sandbox, so guarddog there needs guarddog-sandbox: false.
         type: string
         default: ubuntu-latest
 
