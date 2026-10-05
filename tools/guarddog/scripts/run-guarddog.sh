@@ -250,11 +250,16 @@ stage_tree() {
 	printf '%s' "$kept" | tar -cf - -T - | tar -xf - -C "$stage" ||
 		fail "could not stage the tracked tree"
 }
-cleanup() { [ -n "$stage" ] && rm -rf "$stage"; }
+stderr_log=$(mktemp) || fail "could not create a log file"
+cleanup() {
+	rm -f "$stderr_log"
+	[ -n "$stage" ] && rm -rf "$stage"
+}
 trap cleanup EXIT
 
 scanned=0
 failed=()
+no_sandbox=false
 while IFS=$'\t' read -r ecosystem command target; do
 	[ -n "$ecosystem" ] || continue
 
@@ -284,8 +289,10 @@ while IFS=$'\t' read -r ecosystem command target; do
 	fi
 
 	printf '::group::guarddog %s %s %s\n' "$ecosystem" "$command" "$target_label"
-	report=$("$GD_BIN" "${args[@]}")
+	report=$("$GD_BIN" "${args[@]}" 2>"$stderr_log")
 	rc=$?
+	cat "$stderr_log" >&2
+	grep -q 'sandbox is not available' "$stderr_log" && no_sandbox=true
 	if [ "$allow_json" != "[]" ] && [ "$command" = verify ]; then
 		if verdict=$(printf '%s' "$report" | jq -c --argjson allow "$allow_json" \
 			--arg ecosystem "$ecosystem" "$ALLOW_FILTER" 2>/dev/null); then
@@ -320,6 +327,8 @@ while IFS=$'\t' read -r ecosystem command target; do
 done <<<"$plan"
 
 if [ "${#failed[@]}" -gt 0 ]; then
+	[ "$no_sandbox" = false ] || printf '::error::%s\n' "this runner's kernel has no Landlock, \
+which Blacksmith runners lack. Run guarddog on a GitHub-hosted runner or set sandbox: false."
 	printf '::error::guarddog flagged %s of %s target(s): %s\n' \
 		"${#failed[@]}" "$scanned" "${failed[*]}"
 	exit 1

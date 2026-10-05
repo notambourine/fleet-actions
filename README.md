@@ -24,6 +24,7 @@ jobs:
     uses: notambourine/fleet-actions/.github/workflows/fleet-ci.yml@<sha> # v1.0.1
     # guarddog, runner-tier, and vet default to false. Other checks default to true.
     # with:
+    #   runs-on: blacksmith-2vcpu-ubuntu-2404 # Defaults to ubuntu-latest.
     #   guarddog: true
     #   runner-tier: true # Suggest clear ubuntu-slim cost savings in private repos.
     #   vet: true # Advisories and malware in declared dependencies. Read "vet cost" below.
@@ -84,6 +85,14 @@ satisfies the policy; neither scope judges whether the grants are minimal. Every
 a caller-side timeout does not reach it.
 
 Relax either through the inputs above rather than by disabling `actionlint`.
+
+## Runner
+
+`runs-on` picks the fleet job's runner; the default is `ubuntu-latest`. Blacksmith runners lack
+the Landlock sandbox `guarddog` needs, so a repository on Blacksmith keeps `guarddog` off, sets
+`guarddog-sandbox: false`, or calls the workflow a second time on a GitHub-hosted runner with
+only `guarddog` on. A repository that runs its own jobs on Blacksmith also lists the label in
+`actionlint-extra-labels`.
 
 ## Runner tier
 

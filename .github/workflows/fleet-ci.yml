@@ -56,6 +56,11 @@ on:
         type: boolean
         default: false
 
+      runs-on:
+        description: Runner label for the fleet job. Read "Runner" in the README before Blacksmith.
+        type: string
+        default: ubuntu-latest
+
       scan-mode:
         description: betterleaks subcommand, git or dir. git fingerprints commits.
         type: string
@@ -266,12 +271,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: fleet-ci-${{ github.repository }}-${{ github.workflow }}-${{ github.ref }}
+  group: fleet-ci-${{ github.repository }}-${{ github.workflow }}-${{ github.ref }}-${{ inputs.runs-on }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   fleet:
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runs-on }}
     timeout-minutes: 15
     permissions:
       contents: read

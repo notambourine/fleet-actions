@@ -259,6 +259,20 @@ chmod +x "$silent/guarddog"
 run_case "fails report despite zero exit" "$npm" 1 "guarddog flagged" \
 	GD_PLAN_ONLY=false GD_ACTIONS=false GD_BIN="$silent/guarddog" PATH="$silent:$PATH"
 
+nolandlock="$TMP/stub-nolandlock"
+mkdir -p "$nolandlock"
+cat >"$nolandlock/guarddog" <<'EOF'
+#!/bin/bash
+[ "$*" = --version ] && { echo 3.2.0; exit 0; }
+echo "ERROR: Kernel-level sandbox is not available on this platform. Use --no-sandbox to scan without it." >&2
+exit 2
+EOF
+chmod +x "$nolandlock/guarddog"
+run_case "names missing sandbox" "$npm" 1 "set sandbox: false" \
+	GD_PLAN_ONLY=false GD_ACTIONS=false GD_BIN="$nolandlock/guarddog" PATH="$nolandlock:$PATH"
+refute_case "omits sandbox hint on finding" "$npm" "set sandbox: false" \
+	GD_PLAN_ONLY=false GD_ACTIONS=false GD_BIN="$finding/guarddog" PATH="$finding:$PATH"
+
 cases=$((cases + 1))
 probe="$TMP/stub-probe"
 mkdir -p "$probe"
