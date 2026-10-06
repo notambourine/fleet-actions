@@ -26,7 +26,6 @@ jobs:
     uses: ./.github/workflows/fleet-ci.yml
     with:
       runs-on: ${{ matrix.runner }}
-      actionlint-extra-labels: blacksmith-2vcpu-ubuntu-2404
       dash-exclude-defaults: false
       guarddog: ${{ matrix.guarddog }} # Opt-in for callers, so only the self-test covers the gate.
       runner-tier: true # Opt-in for callers.

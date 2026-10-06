@@ -91,7 +91,7 @@ Relax either through the inputs above rather than by disabling `actionlint`.
 `runs-on` picks the fleet job's runner; the default is `ubuntu-latest`. Blacksmith runners lack
 the Landlock sandbox `guarddog` needs, so a repository on Blacksmith keeps `guarddog` off, sets
 `guarddog-sandbox: false`, or calls the workflow a second time on a GitHub-hosted runner with
-only `guarddog` on. A repository that runs its own jobs on Blacksmith also lists the label in
+only `guarddog` on. actionlint accepts `ubuntu-slim` and every `blacksmith-*` label without
 `actionlint-extra-labels`.
 
 ## Runner tier
