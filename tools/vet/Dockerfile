@@ -1,5 +1,5 @@
 # Dependabot updates the tag and digest together.
-FROM ghcr.io/safedep/vet:v1.19.1@sha256:5f36dc05ae3c0a9eb09f466436bc3bff369db776e771f579faed983bcfcc2f95
+FROM ghcr.io/safedep/vet:v1.20.0@sha256:8679f183918e5d5a7c924310f34bc6f39324ac367e7dcbcfbc1b42e4e90431dd
 
 COPY scripts/run-vet.sh /run-vet.sh
 
