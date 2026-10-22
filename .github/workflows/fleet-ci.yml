@@ -8,7 +8,7 @@ on:
         type: boolean
         default: true
       zizmor:
-        description: Workflow audit, medium severity and above.
+        description: Workflow, action, Dependabot, and pre-commit audit, medium severity and above.
         type: boolean
         default: true
       actionlint:
@@ -88,6 +88,11 @@ on:
         description: On pull_request, scan only the pull request's commits.
         type: boolean
         default: false
+
+      zizmor-inputs:
+        description: Paths zizmor audits, whitespace-separated. Set .github/workflows to audit workflows only.
+        type: string
+        default: "."
 
       dash-base-ref:
         description: Base branch for the ratchet, without the origin/ prefix. Empty resolves it from the event.
@@ -297,11 +302,11 @@ jobs:
 
       # The action vendors hash-locked wheels per zizmor version, so this sha pins zizmor itself.
       # uvx resolved zizmor and its tree from PyPI at run time, which no bot could gate.
-      - name: zizmor workflow audit
+      - name: zizmor audit
         if: ${{ inputs.zizmor && !cancelled() }}
         uses: zizmorcore/zizmor-action@85b2b9fb8e3325e7a23d7d0a9d7ba5ae0f999e3e # v0.7.1
         with:
-          inputs: .github/workflows
+          inputs: ${{ inputs.zizmor-inputs }}
           min-severity: medium
           # SARIF upload would need security-events: write from every caller and would move
           # findings off the fleet check. Fail the job instead.
