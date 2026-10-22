@@ -58,6 +58,9 @@ updates:
       timezone: America/Chicago
     cooldown:
       default-days: 7
+      # Org-owned releases skip the wait so fleet fixes land the same day.
+      exclude:
+        - notambourine/*
     groups:
       actions:
         patterns:
