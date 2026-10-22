@@ -295,7 +295,7 @@ jobs:
           log-opts: ${{ inputs.betterleaks-log-opts }}
           pr-range: ${{ inputs.betterleaks-pr-range }}
 
-      # The action vendors a version-to-digest table, so this sha pins the zizmor image itself.
+      # The action vendors hash-locked wheels per zizmor version, so this sha pins zizmor itself.
       # uvx resolved zizmor and its tree from PyPI at run time, which no bot could gate.
       - name: zizmor workflow audit
         if: ${{ inputs.zizmor && !cancelled() }}
