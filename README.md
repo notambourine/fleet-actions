@@ -175,11 +175,9 @@ jobs:
 
       - run: npm ci
 
-      - uses: notambourine/wormhook@<sha> # v0.32.2
-        with:
-          mode: deep
+      - uses: notambourine/fleet-actions/tools/wormhook@<sha> # v1.12.0
 
-      - uses: notambourine/fleet-actions/tools/guarddog@<sha> # v1.0.1
+      - uses: notambourine/fleet-actions/tools/guarddog@<sha> # v1.12.0
         with:
           scan-paths: npm:node_modules
           local-scan: false
@@ -203,6 +201,7 @@ The two `false` values avoid repeating the fleet scan. Keep wormhook enabled in
 | `tools/runner-tier` | Conservative `ubuntu-slim` cost suggestions for private repositories. |
 | `tools/tripwire` | Supply-chain persistence indicators. |
 | `tools/vet` | Advisories and OSV malware records for declared dependencies. |
+| `tools/wormhook` | npm and PyPI supply-chain malware, including installed `node_modules`. |
 
 Script-backed tool suites live in `tools/<name>/test/run.sh`. Pull requests run
 affected suites; pushes and schedules run all suites.
