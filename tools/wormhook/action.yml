@@ -1,0 +1,29 @@
+# Suite coverage marker.
+name: wormhook
+description: >-
+  Scan the tree, including installed node_modules, for npm and PyPI supply-chain malware.
+  Run it after the install step so the deep walk sees resolved transitives.
+author: NoTambourine LLC
+branding:
+  icon: shield
+  color: red
+
+inputs:
+  path:
+    description: Directory to scan.
+    default: "."
+  mode:
+    description: fast or deep. deep forces the node_modules content walk.
+    default: deep
+  fail-on:
+    description: critical fails on a confirmed IOC. degraded also fails on a degraded scan.
+    default: critical
+
+runs:
+  using: composite
+  steps:
+    - uses: notambourine/wormhook@c8589a4e29179e273efc29db1a4ac2da357aa64b # v0.36.0
+      with:
+        path: ${{ inputs.path }}
+        mode: ${{ inputs.mode }}
+        fail-on: ${{ inputs.fail-on }}

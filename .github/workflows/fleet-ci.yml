@@ -69,7 +69,7 @@ on:
         description: >-
           wormhook scan depth, fast or deep. deep forces the Tier-2 node_modules content walk;
           it no-ops when the directory is absent, so it only costs a repo that commits the tree.
-          fleet-ci never installs, so a repo wanting real Tier-2 runs wormhook again after npm ci.
+          fleet-ci never installs, so a repo wanting real Tier-2 runs tools/wormhook after npm ci.
         type: string
         default: deep
       fetch-depth:
@@ -406,7 +406,7 @@ jobs:
 
       - name: wormhook
         if: ${{ inputs.wormhook && !cancelled() }}
-        uses: notambourine/wormhook@c8589a4e29179e273efc29db1a4ac2da357aa64b # v0.36.0
+        uses: $/tools/wormhook
         with:
           mode: ${{ inputs.wormhook-mode }}
 

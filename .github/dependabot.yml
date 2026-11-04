@@ -51,7 +51,9 @@ updates:
       default-days: 7
 
   - package-ecosystem: github-actions
-    directory: /
+    directories:
+      - /
+      - /tools/*
     schedule:
       interval: cron
       cronjob: "0 9 * * *"
