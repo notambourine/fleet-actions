@@ -1,5 +1,5 @@
 # Dependabot updates the tag and digest together.
-FROM ghcr.io/betterleaks/betterleaks:v1.9.0@sha256:e3b95b0db6c2735db17165c009b0ad6d9cef34fb4578659232b98f69d7346cac
+FROM ghcr.io/betterleaks/betterleaks:v1.10.0@sha256:c6dfa75145fe5b31fdaf02feff18a73f1e11df8ca04876522f87f857656c83ca
 
 COPY scripts/run-betterleaks.sh /run-betterleaks.sh
 
