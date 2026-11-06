@@ -55,6 +55,13 @@ args=("$BL_SCAN" "$target" --no-banner "--redact=$BL_REDACT" --confidence "$BL_C
 if [ -n "$log_opts" ]; then
 	args+=("--log-opts=$log_opts")
 fi
+# betterleaks 1.10 stopped auto-loading the scanned repo's config.
+for config in .betterleaks.toml .gitleaks.toml; do
+	if [ -f "$target/$config" ]; then
+		args+=(--config "$target/$config")
+		break
+	fi
+done
 
 if [ "$BL_PLAN_ONLY" = true ]; then
 	printf 'plan: %s %s\n' "$BL_BIN" "${args[*]}"

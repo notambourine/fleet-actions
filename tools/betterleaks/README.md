@@ -19,7 +19,9 @@ Windows runners.
 `dir` scans the worktree only. `betterleaks-log-opts` and `betterleaks-pr-range` narrow
 a `git` scan and are ignored with a warning under `dir`.
 
-Validation is disabled. `--redact=100` hides matched values from logs.
+Validation is disabled. A `.betterleaks.toml` or `.gitleaks.toml` at the scan path is passed
+as `--config`; betterleaks 1.10 no longer loads it on its own. `--redact=100` hides matched
+values from logs.
 
 ## Tests
 
