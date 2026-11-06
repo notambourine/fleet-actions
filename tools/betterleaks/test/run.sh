@@ -77,6 +77,13 @@ run_case "defaults to full redaction" "$full" 0 "--redact=100"
 run_case "sets redaction" "$full" 0 "--redact=0" BL_REDACT=0
 run_case "sets confidence" "$full" 0 "--confidence high" BL_CONFIDENCE=high
 
+printf "title = \"x\"\n" >"$full/.gitleaks.toml"
+run_case "loads gitleaks config" "$full" 0 "--config $full/.gitleaks.toml"
+printf "title = \"x\"\n" >"$full/.betterleaks.toml"
+run_case "prefers betterleaks config" "$full" 0 "--config $full/.betterleaks.toml"
+rm "$full/.gitleaks.toml" "$full/.betterleaks.toml"
+refute_case "omits absent config" "$full" "--config"
+
 run_case "rejects unknown scan" "$full" 1 "scan must be 'git' or 'dir'" BL_SCAN=history
 run_case "rejects unknown confidence" "$full" 1 "confidence must be low, medium, or high" BL_CONFIDENCE=paranoid
 run_case "rejects invalid redaction" "$full" 1 "redact must be 0-100" BL_REDACT=420
