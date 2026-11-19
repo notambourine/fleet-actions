@@ -22,7 +22,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: notambourine/wormhook@64dbe46af2af4567eeec4ea441901720a8aa5fab # v0.36.1
+    - uses: notambourine/wormhook@651d41f83aeddffd1f4ff863a845975cde94030b # v0.40.0
       with:
         path: ${{ inputs.path }}
         mode: ${{ inputs.mode }}
